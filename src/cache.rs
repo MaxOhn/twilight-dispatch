@@ -1,5 +1,4 @@
 use crate::{
-    config::CONFIG,
     constants::{
         channel_key, guild_key, member_key, role_key, user_key, BOT_USER_KEY, CACHE_DUMP_INTERVAL,
         CHANNEL_KEY, GUILD_KEY, KEYS_SUFFIX, MESSAGE_KEY, SESSIONS_KEY, STATUSES_KEY,
@@ -21,7 +20,7 @@ use twilight_model::{
     application::interaction::Interaction,
     channel::{Channel, GuildChannel},
     gateway::event::Event,
-    id::{GuildId, UserId},
+    id::GuildId,
 };
 
 pub async fn get<K, T>(conn: &mut redis::aio::Connection, key: K) -> ApiResult<Option<T>>
@@ -252,11 +251,7 @@ async fn clear_guild(conn: &mut redis::aio::Connection, guild_id: GuildId) -> Ap
     Ok(())
 }
 
-pub async fn update(
-    conn: &mut redis::aio::Connection,
-    event: &Event,
-    bot_id: UserId,
-) -> ApiResult<()> {
+pub async fn update(conn: &mut redis::aio::Connection, event: &Event) -> ApiResult<()> {
     match event {
         Event::ChannelCreate(data) => {
             if let Channel::Guild(c) = &data.0 {
@@ -346,53 +341,45 @@ pub async fn update(
             }
         }
         Event::MemberAdd(data) => {
-            if CONFIG.state_member {
-                let user_key = user_key(data.user.id);
-                set(conn, &user_key, data.user.to_cached()).await?;
+            let user_key = user_key(data.user.id);
+            set(conn, &user_key, data.user.to_cached()).await?;
 
-                let member_key = member_key(data.guild_id, data.user.id);
-                set(conn, &member_key, data.to_cached()).await?;
-            }
+            let member_key = member_key(data.guild_id, data.user.id);
+            set(conn, &member_key, data.to_cached()).await?;
         }
         Event::MemberRemove(data) => {
-            if CONFIG.state_member {
-                let key = member_key(data.guild_id, data.user.id);
-                del(conn, &key).await?;
-            }
+            let key = member_key(data.guild_id, data.user.id);
+            del(conn, &key).await?;
         }
         Event::MemberUpdate(data) => {
-            if CONFIG.state_member || data.user.id == bot_id {
-                let user_key = user_key(data.user.id);
-                set(conn, &user_key, data.user.to_cached()).await?;
+            let user_key = user_key(data.user.id);
+            set(conn, &user_key, data.user.to_cached()).await?;
 
-                let member_key = member_key(data.guild_id, data.user.id);
+            let member_key = member_key(data.guild_id, data.user.id);
 
-                if let Some(mut member) = get::<_, CachedMember>(conn, &member_key).await? {
-                    member.nick = data.nick.clone();
-                    member.roles = data.roles.clone();
-                    member.user_id = data.user.id;
-                    set(conn, &member_key, &member).await?;
-                }
+            if let Some(mut member) = get::<_, CachedMember>(conn, &member_key).await? {
+                member.nick = data.nick.clone();
+                member.roles = data.roles.clone();
+                member.user_id = data.user.id;
+                set(conn, &member_key, &member).await?;
             }
         }
         Event::MemberChunk(data) => {
-            if CONFIG.state_member {
-                let keys = data
-                    .members
-                    .iter()
-                    .map(|member| member.user.to_cached())
-                    .map(|user| (user_key(user.id), user));
+            let keys = data
+                .members
+                .iter()
+                .map(|member| member.user.to_cached())
+                .map(|user| (user_key(user.id), user));
 
-                set_all(conn, keys).await?;
+            set_all(conn, keys).await?;
 
-                let keys = data
-                    .members
-                    .iter()
-                    .map(|member| member.to_cached())
-                    .map(|member| (member_key(data.guild_id, member.user_id), member));
+            let keys = data
+                .members
+                .iter()
+                .map(|member| member.to_cached())
+                .map(|member| (member_key(data.guild_id, member.user_id), member));
 
-                set_all(conn, keys).await?;
-            }
+            set_all(conn, keys).await?;
         }
         Event::MessageCreate(data) => {
             let user_key = user_key(data.author.id);

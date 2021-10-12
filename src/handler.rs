@@ -26,30 +26,18 @@ pub async fn outgoing(
 ) {
     let shard_strings: Vec<String> = (0..CONFIG.shards_total).map(|x| x.to_string()).collect();
 
-    let mut bot_id = None;
-
     while let Some((shard, event)) = events.next().await {
         let shard = shard as usize;
 
-        if CONFIG.state_enabled {
-            if let Event::Ready(data) = &event {
-                if bot_id.is_none() {
-                    bot_id = Some(data.user.id);
-                }
+        let update_fut = cache::update(conn, &event);
+
+        match timeout(Duration::from_millis(10_000), update_fut).await {
+            Ok(Ok(_)) => {}
+            Ok(Err(err)) => {
+                warn!("[Shard {}] Failed to update state: {:?}", shard, err);
             }
-
-            if let Some(bot_id) = bot_id {
-                let update_fut = cache::update(conn, &event, bot_id);
-
-                match timeout(Duration::from_millis(10_000), update_fut).await {
-                    Ok(Ok(_)) => {}
-                    Ok(Err(err)) => {
-                        warn!("[Shard {}] Failed to update state: {:?}", shard, err);
-                    }
-                    Err(_) => {
-                        warn!("[Shard {}] Timed out while updating state", shard);
-                    }
-                }
+            Err(_) => {
+                warn!("[Shard {}] Timed out while updating state", shard);
             }
         }
 

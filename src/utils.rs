@@ -207,7 +207,7 @@ pub async fn get_resume_sessions(
 }
 
 pub fn get_event_flags() -> EventTypeFlags {
-    let mut event_flags = EventTypeFlags::GATEWAY_HELLO
+    EventTypeFlags::GATEWAY_HELLO
         | EventTypeFlags::GATEWAY_INVALIDATE_SESSION
         | EventTypeFlags::GATEWAY_RECONNECT
         | EventTypeFlags::READY
@@ -218,34 +218,29 @@ pub fn get_event_flags() -> EventTypeFlags {
         | EventTypeFlags::SHARD_IDENTIFYING
         | EventTypeFlags::SHARD_PAYLOAD
         | EventTypeFlags::SHARD_RECONNECTING
-        | EventTypeFlags::SHARD_RESUMING;
-
-    if CONFIG.state_enabled {
-        event_flags |= EventTypeFlags::CHANNEL_CREATE
-            | EventTypeFlags::CHANNEL_DELETE
-            | EventTypeFlags::CHANNEL_UPDATE
-            | EventTypeFlags::GUILD_CREATE
-            | EventTypeFlags::GUILD_DELETE
-            | EventTypeFlags::GUILD_UPDATE
-            | EventTypeFlags::INTERACTION_CREATE
-            | EventTypeFlags::MEMBER_ADD
-            | EventTypeFlags::MEMBER_REMOVE
-            | EventTypeFlags::MEMBER_UPDATE
-            | EventTypeFlags::MEMBER_CHUNK
-            | EventTypeFlags::MESSAGE_CREATE
-            | EventTypeFlags::REACTION_ADD
-            | EventTypeFlags::REACTION_REMOVE
-            | EventTypeFlags::ROLE_CREATE
-            | EventTypeFlags::ROLE_DELETE
-            | EventTypeFlags::ROLE_UPDATE
-            | EventTypeFlags::THREAD_CREATE
-            | EventTypeFlags::THREAD_DELETE
-            | EventTypeFlags::THREAD_UPDATE
-            | EventTypeFlags::UNAVAILABLE_GUILD
-            | EventTypeFlags::USER_UPDATE;
-    }
-
-    event_flags
+        | EventTypeFlags::SHARD_RESUMING
+        | EventTypeFlags::CHANNEL_CREATE
+        | EventTypeFlags::CHANNEL_DELETE
+        | EventTypeFlags::CHANNEL_UPDATE
+        | EventTypeFlags::GUILD_CREATE
+        | EventTypeFlags::GUILD_DELETE
+        | EventTypeFlags::GUILD_UPDATE
+        | EventTypeFlags::INTERACTION_CREATE
+        | EventTypeFlags::MEMBER_ADD
+        | EventTypeFlags::MEMBER_REMOVE
+        | EventTypeFlags::MEMBER_UPDATE
+        | EventTypeFlags::MEMBER_CHUNK
+        | EventTypeFlags::MESSAGE_CREATE
+        | EventTypeFlags::REACTION_ADD
+        | EventTypeFlags::REACTION_REMOVE
+        | EventTypeFlags::ROLE_CREATE
+        | EventTypeFlags::ROLE_DELETE
+        | EventTypeFlags::ROLE_UPDATE
+        | EventTypeFlags::THREAD_CREATE
+        | EventTypeFlags::THREAD_DELETE
+        | EventTypeFlags::THREAD_UPDATE
+        | EventTypeFlags::UNAVAILABLE_GUILD
+        | EventTypeFlags::USER_UPDATE
 }
 
 pub fn log_discord(cluster: &Cluster, color: usize, message: impl Into<String>) {
