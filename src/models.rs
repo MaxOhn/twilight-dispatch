@@ -136,25 +136,25 @@ pub enum GuildItem {
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct CachedGuild {
-    #[serde(rename = "a")]
+    #[serde(default, rename = "a", skip_serializing_if = "Vec::is_empty")]
     pub channels: Vec<GuildChannel>,
-    #[serde(rename = "b")]
+    #[serde(default, rename = "b", skip_serializing_if = "Option::is_none")]
     pub icon: Option<String>,
     #[serde(rename = "c")]
     pub id: GuildId,
-    #[serde(rename = "d", skip_serializing_if = "Vec::is_empty")]
+    #[serde(default, rename = "d", skip_serializing_if = "Vec::is_empty")]
     pub members: Vec<Member>,
     #[serde(rename = "e")]
     pub name: String,
     #[serde(rename = "f")]
     pub owner_id: UserId,
-    #[serde(rename = "g")]
+    #[serde(default, rename = "g", skip_serializing_if = "Vec::is_empty")]
     pub roles: Vec<Role>,
 }
 
 #[derive(Clone, Default, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
 pub struct CachedCurrentUser {
-    #[serde(rename = "a", skip_serializing_if = "Option::is_none")]
+    #[serde(default, rename = "a", skip_serializing_if = "Option::is_none")]
     pub avatar: Option<String>,
     #[serde(rename = "b")]
     pub discriminator: String,
@@ -166,9 +166,9 @@ pub struct CachedCurrentUser {
 
 #[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
 pub struct CachedUser {
-    #[serde(rename = "a", skip_serializing_if = "Option::is_none")]
+    #[serde(default, rename = "a", skip_serializing_if = "Option::is_none")]
     pub avatar: Option<String>,
-    #[serde(rename = "b")]
+    #[serde(default, rename = "b", skip_serializing_if = "is_false")]
     pub bot: bool,
     #[serde(rename = "c")]
     pub discriminator: String,
@@ -178,13 +178,17 @@ pub struct CachedUser {
     pub name: String,
 }
 
+fn is_false(b: &bool) -> bool {
+    !b
+}
+
 #[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
 pub struct CachedMember {
     #[serde(rename = "a")]
     pub guild_id: GuildId,
-    #[serde(rename = "b")]
+    #[serde(default, rename = "b", skip_serializing_if = "Option::is_none")]
     pub nick: Option<String>,
-    #[serde(rename = "c")]
+    #[serde(default, rename = "c", skip_serializing_if = "Vec::is_empty")]
     pub roles: Vec<RoleId>,
     #[serde(rename = "d")]
     pub user_id: UserId,
