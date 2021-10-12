@@ -223,24 +223,27 @@ pub fn get_event_flags() -> EventTypeFlags {
     if CONFIG.state_enabled {
         event_flags |= EventTypeFlags::CHANNEL_CREATE
             | EventTypeFlags::CHANNEL_DELETE
-            | EventTypeFlags::CHANNEL_PINS_UPDATE
             | EventTypeFlags::CHANNEL_UPDATE
             | EventTypeFlags::GUILD_CREATE
             | EventTypeFlags::GUILD_DELETE
-            | EventTypeFlags::GUILD_EMOJIS_UPDATE
             | EventTypeFlags::GUILD_UPDATE
+            | EventTypeFlags::INTERACTION_CREATE
+            | EventTypeFlags::REACTION_ADD
+            | EventTypeFlags::REACTION_REMOVE
             | EventTypeFlags::ROLE_CREATE
             | EventTypeFlags::ROLE_DELETE
             | EventTypeFlags::ROLE_UPDATE
+            | EventTypeFlags::THREAD_CREATE
+            | EventTypeFlags::THREAD_DELETE
+            | EventTypeFlags::THREAD_UPDATE
             | EventTypeFlags::UNAVAILABLE_GUILD
-            | EventTypeFlags::USER_UPDATE
-            | EventTypeFlags::VOICE_STATE_UPDATE;
+            | EventTypeFlags::USER_UPDATE;
 
         if CONFIG.state_member {
             event_flags |= EventTypeFlags::MEMBER_ADD
                 | EventTypeFlags::MEMBER_REMOVE
-                | EventTypeFlags::MEMBER_CHUNK
-                | EventTypeFlags::MEMBER_UPDATE;
+                | EventTypeFlags::MEMBER_UPDATE
+                | EventTypeFlags::MEMBER_CHUNK;
         }
     }
 

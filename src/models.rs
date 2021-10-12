@@ -19,9 +19,9 @@ use twilight_gateway::{cluster::ClusterStartError, shard::LargeThresholdError};
 use twilight_model::{
     channel::GuildChannel,
     gateway::OpCode,
-    guild::{Guild, Member, Permissions, Role},
+    guild::{Guild, Member, PartialMember, Permissions, Role},
     id::{GuildId, RoleId, UserId},
-    user::CurrentUser,
+    user::{CurrentUser, User},
 };
 
 #[derive(Debug, Clone)]
@@ -152,20 +152,6 @@ pub struct CachedGuild {
     pub roles: Vec<Role>,
 }
 
-impl From<&Guild> for CachedGuild {
-    fn from(guild: &Guild) -> Self {
-        Self {
-            channels: guild.channels.to_owned(),
-            icon: guild.icon.to_owned(),
-            id: guild.id,
-            members: guild.members.to_owned(),
-            name: guild.name.to_owned(),
-            owner_id: guild.owner_id,
-            roles: guild.roles.to_owned(),
-        }
-    }
-}
-
 #[derive(Clone, Default, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
 pub struct CachedCurrentUser {
     #[serde(rename = "a", skip_serializing_if = "Option::is_none")]
@@ -178,15 +164,18 @@ pub struct CachedCurrentUser {
     pub name: String,
 }
 
-impl From<&CurrentUser> for CachedCurrentUser {
-    fn from(user: &CurrentUser) -> Self {
-        Self {
-            avatar: user.avatar.to_owned(),
-            discriminator: user.discriminator.to_owned(),
-            id: user.id,
-            name: user.name.to_owned(),
-        }
-    }
+#[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
+pub struct CachedUser {
+    #[serde(rename = "a", skip_serializing_if = "Option::is_none")]
+    pub avatar: Option<String>,
+    #[serde(rename = "b")]
+    pub bot: bool,
+    #[serde(rename = "c")]
+    pub discriminator: String,
+    #[serde(rename = "d")]
+    pub id: UserId,
+    #[serde(rename = "e")]
+    pub name: String,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
@@ -199,16 +188,20 @@ pub struct CachedMember {
     pub roles: Vec<RoleId>,
     #[serde(rename = "d")]
     pub user_id: UserId,
-    // pub user: User, // TODO
 }
 
-impl From<&Member> for CachedMember {
-    fn from(member: &Member) -> Self {
-        Self {
-            guild_id: member.guild_id,
-            nick: member.nick.to_owned(),
-            roles: member.roles.to_owned(),
-            user_id: member.user.id,
+pub struct IntermediateMember {
+    pub nick: Option<String>,
+    pub roles: Vec<RoleId>,
+}
+
+impl IntermediateMember {
+    pub fn into_member(self, guild_id: GuildId, user_id: UserId) -> CachedMember {
+        CachedMember {
+            guild_id,
+            nick: self.nick,
+            roles: self.roles,
+            user_id,
         }
     }
 }
@@ -225,13 +218,88 @@ pub struct CachedRole {
     pub position: i64,
 }
 
-impl From<&Role> for CachedRole {
-    fn from(role: &Role) -> Self {
-        Self {
-            id: role.id,
-            name: role.name.to_owned(),
-            permissions: role.permissions,
-            position: role.position,
+pub trait ToCached {
+    type Kind;
+
+    fn to_cached(&self) -> Self::Kind;
+}
+
+impl ToCached for Guild {
+    type Kind = CachedGuild;
+
+    fn to_cached(&self) -> Self::Kind {
+        CachedGuild {
+            channels: self.channels.to_owned(),
+            icon: self.icon.to_owned(),
+            id: self.id,
+            members: self.members.to_owned(),
+            name: self.name.to_owned(),
+            owner_id: self.owner_id,
+            roles: self.roles.to_owned(),
+        }
+    }
+}
+
+impl ToCached for CurrentUser {
+    type Kind = CachedCurrentUser;
+
+    fn to_cached(&self) -> Self::Kind {
+        CachedCurrentUser {
+            avatar: self.avatar.to_owned(),
+            discriminator: self.discriminator.to_owned(),
+            id: self.id,
+            name: self.name.to_owned(),
+        }
+    }
+}
+
+impl ToCached for Role {
+    type Kind = CachedRole;
+
+    fn to_cached(&self) -> Self::Kind {
+        CachedRole {
+            id: self.id,
+            name: self.name.to_owned(),
+            permissions: self.permissions,
+            position: self.position,
+        }
+    }
+}
+
+impl ToCached for Member {
+    type Kind = CachedMember;
+
+    fn to_cached(&self) -> Self::Kind {
+        CachedMember {
+            guild_id: self.guild_id,
+            nick: self.nick.to_owned(),
+            roles: self.roles.to_owned(),
+            user_id: self.user.id,
+        }
+    }
+}
+
+impl ToCached for PartialMember {
+    type Kind = IntermediateMember;
+
+    fn to_cached(&self) -> Self::Kind {
+        IntermediateMember {
+            nick: self.nick.to_owned(),
+            roles: self.roles.to_owned(),
+        }
+    }
+}
+
+impl ToCached for User {
+    type Kind = CachedUser;
+
+    fn to_cached(&self) -> Self::Kind {
+        CachedUser {
+            avatar: self.avatar.to_owned(),
+            bot: self.bot,
+            discriminator: self.discriminator.to_owned(),
+            id: self.id,
+            name: self.name.to_owned(),
         }
     }
 }

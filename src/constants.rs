@@ -15,6 +15,7 @@ pub const CHANNEL_KEY: &str = "channel";
 pub const MESSAGE_KEY: &str = "message";
 pub const ROLE_KEY: &str = "role";
 pub const MEMBER_KEY: &str = "member";
+pub const USER_KEY: &str = "user";
 
 pub const KEYS_SUFFIX: &str = "_keys";
 
@@ -44,4 +45,8 @@ pub fn role_key(guild: GuildId, role: RoleId) -> String {
 
 pub fn member_key(guild: GuildId, member: UserId) -> String {
     format!("{}:{}:{}", MEMBER_KEY, guild, member)
+}
+
+pub fn user_key(user: UserId) -> String {
+    format!("{}:{}", USER_KEY, user)
 }
