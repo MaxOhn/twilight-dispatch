@@ -17,10 +17,10 @@ use std::{
 use time::{Duration, OffsetDateTime};
 use twilight_gateway::{cluster::ClusterStartError, shard::LargeThresholdError};
 use twilight_model::{
-    channel::GuildChannel,
+    channel::{permission_overwrite::PermissionOverwrite, GuildChannel},
     gateway::OpCode,
     guild::{Guild, Member, PartialMember, Permissions, Role},
-    id::{GuildId, RoleId, UserId},
+    id::{ChannelId, GuildId, RoleId, UserId},
     user::{CurrentUser, User},
 };
 
@@ -128,10 +128,95 @@ pub struct DeliveryInfo {
     pub data: Option<Value>,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
-#[serde(untagged)]
-pub enum GuildItem {
-    Channel(GuildChannel),
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub enum CachedGuildChannel {
+    #[serde(rename = "a")]
+    Text(CachedTextChannel),
+    #[serde(rename = "b")]
+    PrivateThread(CachedThread),
+    #[serde(rename = "c")]
+    PublicThread(CachedThread),
+}
+
+impl CachedGuildChannel {
+    pub const fn guild_id(&self) -> Option<GuildId> {
+        match self {
+            Self::Text(c) => c.guild_id,
+            Self::PrivateThread(c) => c.guild_id,
+            Self::PublicThread(c) => c.guild_id,
+        }
+    }
+
+    pub const fn id(&self) -> ChannelId {
+        match self {
+            Self::Text(c) => c.id,
+            Self::PrivateThread(c) => c.id,
+            Self::PublicThread(c) => c.id,
+        }
+    }
+
+    pub fn try_from(channel: &GuildChannel) -> Option<Self> {
+        match channel {
+            GuildChannel::Category(_) => None,
+            GuildChannel::NewsThread(_) => None,
+            GuildChannel::PrivateThread(c) => {
+                let channel = CachedThread {
+                    guild_id: c.guild_id,
+                    id: c.id,
+                    name: c.name.to_owned(),
+                    parent_id: c.parent_id,
+                };
+
+                Some(Self::PrivateThread(channel))
+            }
+            GuildChannel::PublicThread(c) => {
+                let channel = CachedThread {
+                    guild_id: c.guild_id,
+                    id: c.id,
+                    name: c.name.to_owned(),
+                    parent_id: c.parent_id,
+                };
+
+                Some(Self::PublicThread(channel))
+            }
+            GuildChannel::Text(c) => {
+                let channel = CachedTextChannel {
+                    guild_id: c.guild_id,
+                    id: c.id,
+                    name: c.name.to_owned(),
+                    permission_overwrites: c.permission_overwrites.to_owned(),
+                };
+
+                Some(Self::Text(channel))
+            }
+            GuildChannel::Voice(_) => None,
+            GuildChannel::Stage(_) => None,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub struct CachedTextChannel {
+    #[serde(default, rename = "a", skip_serializing_if = "Option::is_none")]
+    pub guild_id: Option<GuildId>,
+    #[serde(rename = "b")]
+    pub id: ChannelId,
+    #[serde(rename = "c")]
+    pub name: String,
+    #[serde(default, rename = "d", skip_serializing_if = "Vec::is_empty")]
+    pub permission_overwrites: Vec<PermissionOverwrite>,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub struct CachedThread {
+    #[serde(default, rename = "a", skip_serializing_if = "Option::is_none")]
+    pub guild_id: Option<GuildId>,
+    #[serde(rename = "b")]
+    pub id: ChannelId,
+    #[serde(rename = "c")]
+    pub name: String,
+    #[serde(default, rename = "d", skip_serializing_if = "Option::is_none")]
+    pub parent_id: Option<ChannelId>,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]

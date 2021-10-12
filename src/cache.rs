@@ -4,8 +4,8 @@ use crate::{
         CHANNEL_KEY, GUILD_KEY, KEYS_SUFFIX, MESSAGE_KEY, SESSIONS_KEY, STATUSES_KEY,
     },
     models::{
-        ApiError, ApiResult, CachedMember, FormattedDateTime, GuildItem, SessionInfo, StatusInfo,
-        ToCached,
+        ApiError, ApiResult, CachedGuildChannel, CachedMember, FormattedDateTime, SessionInfo,
+        StatusInfo, ToCached,
     },
     utils::get_keys,
 };
@@ -17,10 +17,8 @@ use tokio::time::{sleep, Duration};
 use tracing::warn;
 use twilight_gateway::Cluster;
 use twilight_model::{
-    application::interaction::Interaction,
-    channel::{Channel, GuildChannel},
-    gateway::event::Event,
-    id::GuildId,
+    application::interaction::Interaction, channel::Channel, gateway::event::Event, guild::Member,
+    id::GuildId, user::User,
 };
 
 pub async fn get<K, T>(conn: &mut redis::aio::Connection, key: K) -> ApiResult<Option<T>>
@@ -251,40 +249,51 @@ async fn clear_guild(conn: &mut redis::aio::Connection, guild_id: GuildId) -> Ap
     Ok(())
 }
 
+async fn cache_channel(conn: &mut redis::aio::Connection, channel: &Channel) -> ApiResult<()> {
+    if let Channel::Guild(channel) = channel {
+        if let Some(c) = CachedGuildChannel::try_from(channel) {
+            set(conn, channel_key(c.guild_id().unwrap(), c.id()), c).await?;
+        }
+    }
+
+    Ok(())
+}
+
+async fn cache_member(conn: &mut redis::aio::Connection, member: &Member) -> ApiResult<()> {
+    cache_user(conn, &member.user).await?;
+
+    let member_key = member_key(member.guild_id, member.user.id);
+    set(conn, &member_key, member.to_cached()).await
+}
+
+async fn cache_user(conn: &mut redis::aio::Connection, user: &User) -> ApiResult<()> {
+    let user_key = user_key(user.id);
+
+    set(conn, &user_key, user.to_cached()).await
+}
+
 pub async fn update(conn: &mut redis::aio::Connection, event: &Event) -> ApiResult<()> {
     match event {
-        Event::ChannelCreate(data) => {
-            if let Channel::Guild(c) = &data.0 {
-                set(conn, channel_key(c.guild_id().unwrap(), c.id()), c).await?;
-            }
-        }
+        Event::ChannelCreate(data) => cache_channel(conn, data).await?,
         Event::ChannelDelete(data) => {
-            if let Channel::Guild(c) = &data.0 {
-                del(conn, channel_key(c.guild_id().unwrap(), c.id())).await?;
+            if let Channel::Guild(channel) = &data.0 {
+                if let Some(c) = CachedGuildChannel::try_from(channel) {
+                    del(conn, channel_key(c.guild_id().unwrap(), c.id())).await?;
+                }
             }
         }
-        Event::ChannelUpdate(data) => {
-            if let Channel::Guild(c) = &data.0 {
-                set(conn, channel_key(c.guild_id().unwrap(), c.id()), c).await?;
-            }
-        }
+        Event::ChannelUpdate(data) => cache_channel(conn, data).await?,
         Event::GuildCreate(data) => {
             clear_guild(conn, data.id).await?;
 
-            let mut items = vec![];
-            let mut guild = data.clone();
-            for channel in guild.channels.drain(..) {
-                if let GuildChannel::Text(mut channel) = channel {
-                    channel.guild_id = Some(data.id);
+            // Cache channels
+            let channels = data
+                .channels
+                .iter()
+                .filter_map(CachedGuildChannel::try_from)
+                .map(|channel| (channel_key(data.id, channel.id()), channel));
 
-                    items.push((
-                        channel_key(data.id, channel.id),
-                        GuildItem::Channel(GuildChannel::Text(channel)),
-                    ));
-                }
-            }
-
-            set_all(conn, items).await?;
+            set_all(conn, channels).await?;
 
             // Cache roles
             let roles = data
@@ -325,14 +334,12 @@ pub async fn update(conn: &mut redis::aio::Connection, event: &Event) -> ApiResu
             };
 
             if let Some(user) = user {
-                let user_key = user_key(user.id);
-                set(conn, &user_key, user.to_cached()).await?;
+                cache_user(conn, user).await?;
             }
 
             if let (Some(member), Some(guild_id)) = (member, guild) {
                 if let Some(user) = &member.user {
-                    let user_key = user_key(user.id);
-                    set(conn, &user_key, user.to_cached()).await?;
+                    cache_user(conn, user).await?;
 
                     let member_key = member_key(guild_id, user.id);
                     let member = member.to_cached().into_member(guild_id, user.id);
@@ -340,20 +347,10 @@ pub async fn update(conn: &mut redis::aio::Connection, event: &Event) -> ApiResu
                 }
             }
         }
-        Event::MemberAdd(data) => {
-            let user_key = user_key(data.user.id);
-            set(conn, &user_key, data.user.to_cached()).await?;
-
-            let member_key = member_key(data.guild_id, data.user.id);
-            set(conn, &member_key, data.to_cached()).await?;
-        }
-        Event::MemberRemove(data) => {
-            let key = member_key(data.guild_id, data.user.id);
-            del(conn, &key).await?;
-        }
+        Event::MemberAdd(data) => cache_member(conn, data).await?,
+        Event::MemberRemove(data) => del(conn, member_key(data.guild_id, data.user.id)).await?,
         Event::MemberUpdate(data) => {
-            let user_key = user_key(data.user.id);
-            set(conn, &user_key, data.user.to_cached()).await?;
+            cache_user(conn, &data.user).await?;
 
             let member_key = member_key(data.guild_id, data.user.id);
 
@@ -381,26 +378,15 @@ pub async fn update(conn: &mut redis::aio::Connection, event: &Event) -> ApiResu
 
             set_all(conn, keys).await?;
         }
-        Event::MessageCreate(data) => {
-            let user_key = user_key(data.author.id);
-            set(conn, &user_key, data.author.to_cached()).await?;
-        }
+        Event::MessageCreate(data) => cache_user(conn, &data.author).await?,
         Event::ReactionAdd(data) => {
             if let Some(member) = &data.member {
-                let user_key = user_key(member.user.id);
-                set(conn, &user_key, member.user.to_cached()).await?;
-
-                let member_key = member_key(member.guild_id, member.user.id);
-                set(conn, &member_key, member.to_cached()).await?;
+                cache_member(conn, member).await?;
             }
         }
         Event::ReactionRemove(data) => {
             if let Some(member) = &data.member {
-                let user_key = user_key(member.user.id);
-                set(conn, &user_key, member.user.to_cached()).await?;
-
-                let member_key = member_key(member.guild_id, member.user.id);
-                set(conn, &member_key, member.to_cached()).await?;
+                cache_member(conn, member).await?;
             }
         }
         Event::Ready(data) => {
@@ -417,15 +403,15 @@ pub async fn update(conn: &mut redis::aio::Connection, event: &Event) -> ApiResu
             let key = role_key(data.guild_id, data.role.id);
             set(conn, &key, data.role.to_cached()).await?;
         }
+        Event::ThreadCreate(data) => cache_channel(conn, data).await?,
+        Event::ThreadDelete(data) => cache_channel(conn, data).await?,
+        Event::ThreadUpdate(data) => cache_channel(conn, data).await?,
         Event::UnavailableGuild(data) => {
             clear_guild(conn, data.id).await?;
             set(conn, guild_key(data.id), data).await?;
         }
         Event::UserUpdate(data) => set(conn, BOT_USER_KEY, data.to_cached()).await?,
 
-        Event::ThreadCreate(_) => todo!(),
-        Event::ThreadDelete(_) => todo!(),
-        Event::ThreadUpdate(_) => todo!(),
         _ => {}
     }
 
