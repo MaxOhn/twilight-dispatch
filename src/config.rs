@@ -62,7 +62,7 @@ pub struct Config {
     pub log_guild_channel: u64,
     pub state_enabled: bool,
     pub state_member: bool,
-    pub state_member_ttl: u64,
+    pub state_member_ttl: Option<u64>,
     pub state_message: bool,
     pub state_message_ttl: u64,
     pub state_presence: bool,

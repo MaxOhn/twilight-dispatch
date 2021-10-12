@@ -493,12 +493,12 @@ pub async fn update(
             items.push((guild_key(data.id), GuildItem::Guild(guild)));
 
             set_all(conn, items).await?;
-            if CONFIG.state_member {
+            if let Some(ttl) = CONFIG.state_member_ttl.filter(|_| CONFIG.state_member) {
                 expire_all(
                     conn,
-                    data.members.iter().map(|member| {
-                        (member_key(data.id, member.user.id), CONFIG.state_member_ttl)
-                    }),
+                    data.members
+                        .iter()
+                        .map(|member| (member_key(data.id, member.user.id), ttl)),
                 )
                 .await?;
             }
@@ -547,7 +547,9 @@ pub async fn update(
             if CONFIG.state_member {
                 let key = member_key(data.guild_id, data.user.id);
                 set(conn, &key, &data).await?;
-                expire(conn, &key, CONFIG.state_member_ttl).await?;
+                if let Some(ttl) = CONFIG.state_member_ttl {
+                    expire(conn, &key, ttl).await?;
+                }
             }
         }
         Event::MemberRemove(data) => {
@@ -572,7 +574,9 @@ pub async fn update(
                     member.roles = data.roles.clone();
                     member.user = data.user.clone();
                     set(conn, &key, &member).await?;
-                    expire(conn, &key, CONFIG.state_member_ttl).await?;
+                    if let Some(ttl) = CONFIG.state_member_ttl {
+                        expire(conn, &key, ttl).await?;
+                    }
                 }
             }
         }
@@ -585,16 +589,15 @@ pub async fn update(
                         .map(|member| (member_key(data.guild_id, member.user.id), member)),
                 )
                 .await?;
-                expire_all(
-                    conn,
-                    data.members.iter().map(|member| {
-                        (
-                            member_key(data.guild_id, member.user.id),
-                            CONFIG.state_member_ttl,
-                        )
-                    }),
-                )
-                .await?;
+                if let Some(ttl) = CONFIG.state_member_ttl {
+                    expire_all(
+                        conn,
+                        data.members
+                            .iter()
+                            .map(|member| (member_key(data.guild_id, member.user.id), ttl)),
+                    )
+                    .await?;
+                }
             }
         }
         Event::MessageCreate(data) => {
