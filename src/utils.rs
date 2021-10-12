@@ -228,6 +228,11 @@ pub fn get_event_flags() -> EventTypeFlags {
             | EventTypeFlags::GUILD_DELETE
             | EventTypeFlags::GUILD_UPDATE
             | EventTypeFlags::INTERACTION_CREATE
+            | EventTypeFlags::MEMBER_ADD
+            | EventTypeFlags::MEMBER_REMOVE
+            | EventTypeFlags::MEMBER_UPDATE
+            | EventTypeFlags::MEMBER_CHUNK
+            | EventTypeFlags::MESSAGE_CREATE
             | EventTypeFlags::REACTION_ADD
             | EventTypeFlags::REACTION_REMOVE
             | EventTypeFlags::ROLE_CREATE
@@ -238,13 +243,6 @@ pub fn get_event_flags() -> EventTypeFlags {
             | EventTypeFlags::THREAD_UPDATE
             | EventTypeFlags::UNAVAILABLE_GUILD
             | EventTypeFlags::USER_UPDATE;
-
-        if CONFIG.state_member {
-            event_flags |= EventTypeFlags::MEMBER_ADD
-                | EventTypeFlags::MEMBER_REMOVE
-                | EventTypeFlags::MEMBER_UPDATE
-                | EventTypeFlags::MEMBER_CHUNK;
-        }
     }
 
     event_flags

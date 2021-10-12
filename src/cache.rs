@@ -1,9 +1,8 @@
 use crate::{
     config::CONFIG,
     constants::{
-        channel_key, guild_key, member_key, private_channel_key, role_key, user_key, BOT_USER_KEY,
-        CACHE_DUMP_INTERVAL, CHANNEL_KEY, GUILD_KEY, KEYS_SUFFIX, MESSAGE_KEY, SESSIONS_KEY,
-        STATUSES_KEY,
+        channel_key, guild_key, member_key, role_key, user_key, BOT_USER_KEY, CACHE_DUMP_INTERVAL,
+        CHANNEL_KEY, GUILD_KEY, KEYS_SUFFIX, MESSAGE_KEY, SESSIONS_KEY, STATUSES_KEY,
     },
     models::{
         ApiError, ApiResult, CachedMember, FormattedDateTime, GuildItem, SessionInfo, StatusInfo,
@@ -259,37 +258,21 @@ pub async fn update(
     bot_id: UserId,
 ) -> ApiResult<()> {
     match event {
-        Event::ChannelCreate(data) => match &data.0 {
-            Channel::Private(c) => {
-                set(conn, private_channel_key(c.id), c).await?;
-            }
-            Channel::Guild(c) => {
+        Event::ChannelCreate(data) => {
+            if let Channel::Guild(c) = &data.0 {
                 set(conn, channel_key(c.guild_id().unwrap(), c.id()), c).await?;
             }
-            _ => {}
-        },
-        Event::ChannelDelete(data) => match &data.0 {
-            Channel::Private(c) => {
-                let key = private_channel_key(c.id);
-                del(conn, &key).await?;
+        }
+        Event::ChannelDelete(data) => {
+            if let Channel::Guild(c) = &data.0 {
+                del(conn, channel_key(c.guild_id().unwrap(), c.id())).await?;
             }
-            Channel::Guild(c) => {
-                let key = channel_key(c.guild_id().unwrap(), c.id());
-                del(conn, &key).await?;
+        }
+        Event::ChannelUpdate(data) => {
+            if let Channel::Guild(c) = &data.0 {
+                set(conn, channel_key(c.guild_id().unwrap(), c.id()), c).await?;
             }
-            _ => {}
-        },
-        Event::ChannelUpdate(data) => match &data.0 {
-            Channel::Private(c) => {
-                let key = private_channel_key(c.id);
-                set(conn, &key, c).await?;
-            }
-            Channel::Guild(c) => {
-                let key = channel_key(c.guild_id().unwrap(), c.id());
-                set(conn, &key, c).await?;
-            }
-            _ => {}
-        },
+        }
         Event::GuildCreate(data) => {
             clear_guild(conn, data.id).await?;
 

@@ -35,10 +35,6 @@ pub fn channel_key(guild: GuildId, channel: ChannelId) -> String {
     format!("{}:{}:{}", CHANNEL_KEY, guild, channel)
 }
 
-pub fn private_channel_key(channel: ChannelId) -> String {
-    format!("{}:{}", CHANNEL_KEY, channel)
-}
-
 pub fn role_key(guild: GuildId, role: RoleId) -> String {
     format!("{}:{}:{}", ROLE_KEY, guild, role)
 }
