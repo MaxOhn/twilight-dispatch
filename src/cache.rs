@@ -5,7 +5,10 @@ use crate::{
         CACHE_DUMP_INTERVAL, CHANNEL_KEY, GUILD_KEY, KEYS_SUFFIX, MESSAGE_KEY, SESSIONS_KEY,
         STATUSES_KEY,
     },
-    models::{ApiError, ApiResult, FormattedDateTime, GuildItem, SessionInfo, StatusInfo},
+    models::{
+        ApiError, ApiResult, CachedCurrentUser, CachedGuild, CachedMember, CachedRole,
+        FormattedDateTime, GuildItem, SessionInfo, StatusInfo,
+    },
     utils::get_keys,
 };
 
@@ -18,7 +21,6 @@ use twilight_gateway::Cluster;
 use twilight_model::{
     channel::{Channel, GuildChannel},
     gateway::event::Event,
-    guild::Member,
     id::{GuildId, UserId},
 };
 
@@ -302,32 +304,35 @@ pub async fn update(
                     ));
                 }
             }
-            for role in guild.roles.drain(..) {
-                items.push((role_key(data.id, role.id), GuildItem::Role(role)));
-            }
-            for member in guild.members.drain(..) {
-                if CONFIG.state_member || member.user.id == bot_id {
-                    items.push((
-                        member_key(data.id, member.user.id),
-                        GuildItem::Member(member),
-                    ));
-                }
-            }
-            items.push((guild_key(data.id), GuildItem::Guild(guild)));
 
             set_all(conn, items).await?;
+
+            // Cache roles
+            let roles = data
+                .roles
+                .iter()
+                .map(|role| (role_key(data.id, role.id), CachedRole::from(role)));
+
+            set_all(conn, roles).await?;
+
+            // Cache members
+            let members = data.members.iter().map(|member| {
+                let key = member_key(data.id, member.user.id);
+
+                (key, CachedMember::from(member))
+            });
+
+            set_all(conn, members).await?;
+
+            // Cache the guild itself
+            set(conn, guild_key(data.id), CachedGuild::from(&data.0)).await?;
         }
-        Event::GuildDelete(data) => {
-            clear_guild(conn, data.id).await?;
-        }
-        Event::GuildUpdate(data) => {
-            let key = guild_key(data.id);
-            set(conn, &key, &data).await?;
-        }
+        Event::GuildDelete(data) => clear_guild(conn, data.id).await?,
+        Event::GuildUpdate(data) => set(conn, guild_key(data.id), &data).await?,
         Event::MemberAdd(data) => {
             if CONFIG.state_member {
                 let key = member_key(data.guild_id, data.user.id);
-                set(conn, &key, &data).await?;
+                set(conn, &key, CachedMember::from(&data.0)).await?;
             }
         }
         Event::MemberRemove(data) => {
@@ -339,53 +344,46 @@ pub async fn update(
         Event::MemberUpdate(data) => {
             if CONFIG.state_member || data.user.id == bot_id {
                 let key = member_key(data.guild_id, data.user.id);
-                let member: Option<Member> = get(conn, &key).await?;
-                if let Some(mut member) = member {
-                    member.joined_at = Some(data.joined_at.clone());
+
+                if let Some(mut member) = get::<_, CachedMember>(conn, &key).await? {
                     member.nick = data.nick.clone();
-                    member.premium_since = data.premium_since.clone();
                     member.roles = data.roles.clone();
-                    member.user = data.user.clone();
+                    member.user_id = data.user.id;
                     set(conn, &key, &member).await?;
                 }
             }
         }
         Event::MemberChunk(data) => {
             if CONFIG.state_member {
-                set_all(
-                    conn,
-                    data.members
-                        .iter()
-                        .map(|member| (member_key(data.guild_id, member.user.id), member)),
-                )
-                .await?;
+                let keys = data
+                    .members
+                    .iter()
+                    .map(CachedMember::from)
+                    .map(|member| (member_key(data.guild_id, member.user_id), member));
+
+                set_all(conn, keys).await?;
             }
         }
         Event::Ready(data) => {
-            set(conn, BOT_USER_KEY, &data.user).await?;
-            set_all(
-                conn,
-                data.guilds.iter().map(|guild| (guild_key(guild.id), guild)),
-            )
-            .await?;
+            set(conn, BOT_USER_KEY, CachedCurrentUser::from(&data.user)).await?;
+            let keys = data.guilds.iter().map(|guild| (guild_key(guild.id), guild));
+            set_all(conn, keys).await?;
         }
         Event::RoleCreate(data) => {
-            set(conn, role_key(data.guild_id, data.role.id), &data.role).await?;
+            let key = role_key(data.guild_id, data.role.id);
+            set(conn, &key, CachedRole::from(&data.role)).await?;
         }
-        Event::RoleDelete(data) => {
-            let key = role_key(data.guild_id, data.role_id);
-            del(conn, &key).await?;
-        }
+        Event::RoleDelete(data) => del(conn, role_key(data.guild_id, data.role_id)).await?,
         Event::RoleUpdate(data) => {
             let key = role_key(data.guild_id, data.role.id);
-            set(conn, &key, &data.role).await?;
+            set(conn, &key, CachedRole::from(&data.role)).await?;
         }
         Event::UnavailableGuild(data) => {
             clear_guild(conn, data.id).await?;
             set(conn, guild_key(data.id), data).await?;
         }
         Event::UserUpdate(data) => {
-            set(conn, BOT_USER_KEY, &data).await?;
+            set(conn, BOT_USER_KEY, CachedCurrentUser::from(&data.0)).await?
         }
         _ => {}
     }

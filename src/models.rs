@@ -18,9 +18,10 @@ use time::{Duration, OffsetDateTime};
 use twilight_gateway::{cluster::ClusterStartError, shard::LargeThresholdError};
 use twilight_model::{
     channel::GuildChannel,
-    gateway::{payload::GuildCreate, presence::Presence, OpCode},
-    guild::{Emoji, Member, Role},
-    voice::VoiceState,
+    gateway::OpCode,
+    guild::{Guild, Member, Permissions, Role},
+    id::{GuildId, RoleId, UserId},
+    user::CurrentUser,
 };
 
 #[derive(Debug, Clone)]
@@ -130,13 +131,109 @@ pub struct DeliveryInfo {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(untagged)]
 pub enum GuildItem {
-    Guild(Box<GuildCreate>),
     Channel(GuildChannel),
-    Role(Role),
-    Emoji(Emoji),
-    Voice(VoiceState),
-    Member(Member),
-    Presence(Presence),
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub struct CachedGuild {
+    #[serde(rename = "a")]
+    pub channels: Vec<GuildChannel>,
+    #[serde(rename = "b")]
+    pub icon: Option<String>,
+    #[serde(rename = "c")]
+    pub id: GuildId,
+    #[serde(rename = "d", skip_serializing_if = "Vec::is_empty")]
+    pub members: Vec<Member>,
+    #[serde(rename = "e")]
+    pub name: String,
+    #[serde(rename = "f")]
+    pub owner_id: UserId,
+    #[serde(rename = "g")]
+    pub roles: Vec<Role>,
+}
+
+impl From<&Guild> for CachedGuild {
+    fn from(guild: &Guild) -> Self {
+        Self {
+            channels: guild.channels.to_owned(),
+            icon: guild.icon.to_owned(),
+            id: guild.id,
+            members: guild.members.to_owned(),
+            name: guild.name.to_owned(),
+            owner_id: guild.owner_id,
+            roles: guild.roles.to_owned(),
+        }
+    }
+}
+
+#[derive(Clone, Default, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
+pub struct CachedCurrentUser {
+    #[serde(rename = "a", skip_serializing_if = "Option::is_none")]
+    pub avatar: Option<String>,
+    #[serde(rename = "b")]
+    pub discriminator: String,
+    #[serde(rename = "c")]
+    pub id: UserId,
+    #[serde(rename = "d")]
+    pub name: String,
+}
+
+impl From<&CurrentUser> for CachedCurrentUser {
+    fn from(user: &CurrentUser) -> Self {
+        Self {
+            avatar: user.avatar.to_owned(),
+            discriminator: user.discriminator.to_owned(),
+            id: user.id,
+            name: user.name.to_owned(),
+        }
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
+pub struct CachedMember {
+    #[serde(rename = "a")]
+    pub guild_id: GuildId,
+    #[serde(rename = "b")]
+    pub nick: Option<String>,
+    #[serde(rename = "c")]
+    pub roles: Vec<RoleId>,
+    #[serde(rename = "d")]
+    pub user_id: UserId,
+    // pub user: User, // TODO
+}
+
+impl From<&Member> for CachedMember {
+    fn from(member: &Member) -> Self {
+        Self {
+            guild_id: member.guild_id,
+            nick: member.nick.to_owned(),
+            roles: member.roles.to_owned(),
+            user_id: member.user.id,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
+pub struct CachedRole {
+    #[serde(rename = "a")]
+    pub id: RoleId,
+    #[serde(rename = "b")]
+    pub name: String,
+    #[serde(rename = "c")]
+    pub permissions: Permissions,
+    #[serde(rename = "d")]
+    pub position: i64,
+}
+
+impl From<&Role> for CachedRole {
+    fn from(role: &Role) -> Self {
+        Self {
+            id: role.id,
+            name: role.name.to_owned(),
+            permissions: role.permissions,
+            position: role.position,
+        }
+    }
 }
 
 pub type ApiResult<T> = Result<T, ApiError>;
