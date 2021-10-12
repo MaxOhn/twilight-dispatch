@@ -1,10 +1,7 @@
 use crate::{
     cache,
     config::CONFIG,
-    constants::{
-        CHANNEL_KEY, EMOJI_KEY, GUILD_KEY, KEYS_SUFFIX, MEMBER_KEY, MESSAGE_KEY,
-        METRICS_DUMP_INTERVAL, PRESENCE_KEY, ROLE_KEY, VOICE_KEY,
-    },
+    constants::{CHANNEL_KEY, GUILD_KEY, KEYS_SUFFIX, MEMBER_KEY, METRICS_DUMP_INTERVAL, ROLE_KEY},
     models::ApiResult,
 };
 
@@ -68,18 +65,10 @@ lazy_static! {
         register_int_gauge!("state_guilds", "Number of guilds in state cache").unwrap();
     pub static ref STATE_CHANNELS: IntGauge =
         register_int_gauge!("state_channels", "Number of channels in state cache").unwrap();
-    pub static ref STATE_MESSAGES: IntGauge =
-        register_int_gauge!("state_messages", "Number of messages in state cache").unwrap();
     pub static ref STATE_ROLES: IntGauge =
         register_int_gauge!("state_roles", "Number of roles in state cache").unwrap();
-    pub static ref STATE_EMOJIS: IntGauge =
-        register_int_gauge!("state_emojis", "Number of emojis in state cache").unwrap();
     pub static ref STATE_MEMBERS: IntGauge =
         register_int_gauge!("state_members", "Number of members in state cache").unwrap();
-    pub static ref STATE_PRESENCES: IntGauge =
-        register_int_gauge!("state_presences", "Number of presences in state cache").unwrap();
-    pub static ref STATE_VOICES: IntGauge =
-        register_int_gauge!("state_voices", "Number of voices in state cache").unwrap();
 }
 
 async fn serve(req: Request<Body>) -> ApiResult<Response<Body>> {
@@ -122,34 +111,21 @@ pub async fn run_server() -> ApiResult<()> {
 struct StateStats {
     guilds: u64,
     channels: u64,
-    messages: u64,
     roles: u64,
-    emojis: u64,
     members: u64,
-    presences: u64,
-    voices: u64,
 }
 
 async fn get_state_stats(conn: &mut redis::aio::Connection) -> ApiResult<StateStats> {
     let guilds = cache::get_members_len(conn, format!("{}{}", GUILD_KEY, KEYS_SUFFIX)).await?;
     let channels = cache::get_members_len(conn, format!("{}{}", CHANNEL_KEY, KEYS_SUFFIX)).await?;
-    let messages = cache::get_members_len(conn, format!("{}{}", MESSAGE_KEY, KEYS_SUFFIX)).await?;
     let roles = cache::get_members_len(conn, format!("{}{}", ROLE_KEY, KEYS_SUFFIX)).await?;
-    let emojis = cache::get_members_len(conn, format!("{}{}", EMOJI_KEY, KEYS_SUFFIX)).await?;
     let members = cache::get_members_len(conn, format!("{}{}", MEMBER_KEY, KEYS_SUFFIX)).await?;
-    let presences =
-        cache::get_members_len(conn, format!("{}{}", PRESENCE_KEY, KEYS_SUFFIX)).await?;
-    let voices = cache::get_members_len(conn, format!("{}{}", VOICE_KEY, KEYS_SUFFIX)).await?;
 
     Ok(StateStats {
         guilds,
         channels,
-        messages,
         roles,
-        emojis,
         members,
-        presences,
-        voices,
     })
 }
 
@@ -197,12 +173,8 @@ pub async fn run_jobs(conn: &mut redis::aio::Connection, clusters: &[Cluster]) {
             Ok(stats) => {
                 STATE_GUILDS.set(stats.guilds as i64);
                 STATE_CHANNELS.set(stats.channels as i64);
-                STATE_MESSAGES.set(stats.messages as i64);
                 STATE_ROLES.set(stats.roles as i64);
-                STATE_EMOJIS.set(stats.emojis as i64);
                 STATE_MEMBERS.set(stats.members as i64);
-                STATE_PRESENCES.set(stats.presences as i64);
-                STATE_VOICES.set(stats.voices as i64);
             }
             Err(err) => {
                 warn!("Failed to get state stats: {:?}", err);

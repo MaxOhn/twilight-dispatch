@@ -1,4 +1,4 @@
-use twilight_model::id::{ChannelId, EmojiId, GuildId, MessageId, RoleId, UserId};
+use twilight_model::id::{ChannelId, GuildId, RoleId, UserId};
 
 pub const EXCHANGE: &str = "gateway";
 pub const QUEUE_RECV: &str = "gateway.recv";
@@ -14,10 +14,7 @@ pub const GUILD_KEY: &str = "guild";
 pub const CHANNEL_KEY: &str = "channel";
 pub const MESSAGE_KEY: &str = "message";
 pub const ROLE_KEY: &str = "role";
-pub const EMOJI_KEY: &str = "emoji";
 pub const MEMBER_KEY: &str = "member";
-pub const PRESENCE_KEY: &str = "presence";
-pub const VOICE_KEY: &str = "voice";
 
 pub const KEYS_SUFFIX: &str = "_keys";
 pub const EXPIRY_KEYS: &str = "expiry_keys";
@@ -45,26 +42,10 @@ pub fn private_channel_key(channel: ChannelId) -> String {
     format!("{}:{}", CHANNEL_KEY, channel)
 }
 
-pub fn message_key(channel: ChannelId, message: MessageId) -> String {
-    format!("{}:{}:{}", MESSAGE_KEY, channel, message)
-}
-
 pub fn role_key(guild: GuildId, role: RoleId) -> String {
     format!("{}:{}:{}", ROLE_KEY, guild, role)
 }
 
-pub fn emoji_key(guild: GuildId, emoji: EmojiId) -> String {
-    format!("{}:{}:{}", EMOJI_KEY, guild, emoji)
-}
-
 pub fn member_key(guild: GuildId, member: UserId) -> String {
     format!("{}:{}:{}", MEMBER_KEY, guild, member)
-}
-
-pub fn presence_key(guild: GuildId, member: UserId) -> String {
-    format!("{}:{}:{}", PRESENCE_KEY, guild, member)
-}
-
-pub fn voice_key(guild: GuildId, member: UserId) -> String {
-    format!("{}:{}:{}", VOICE_KEY, guild, member)
 }

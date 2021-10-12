@@ -24,11 +24,8 @@ use twilight_gateway::{
 };
 use twilight_model::{
     channel::embed::Embed,
-    gateway::{
-        payload::update_presence::UpdatePresencePayload,
-        presence::{Activity, UserOrId},
-    },
-    id::{ChannelId, UserId},
+    gateway::{payload::update_presence::UpdatePresencePayload, presence::Activity},
+    id::ChannelId,
 };
 
 #[derive(Clone, Debug)]
@@ -97,14 +94,6 @@ async fn waiter(mut rx: UnboundedReceiver<Sender<()>>, duration: Duration) {
             warn!("skipping, send failed: {:?}", err);
         }
         sleep(duration).await;
-    }
-}
-
-#[inline]
-pub fn get_user_id(user: &UserOrId) -> UserId {
-    match user {
-        UserOrId::User(u) => u.id,
-        UserOrId::UserId { id } => *id,
     }
 }
 
@@ -252,17 +241,6 @@ pub fn get_event_flags() -> EventTypeFlags {
                 | EventTypeFlags::MEMBER_REMOVE
                 | EventTypeFlags::MEMBER_CHUNK
                 | EventTypeFlags::MEMBER_UPDATE;
-
-            if CONFIG.state_presence {
-                event_flags |= EventTypeFlags::PRESENCE_UPDATE;
-            }
-        }
-
-        if CONFIG.state_message {
-            event_flags |= EventTypeFlags::MESSAGE_CREATE
-                | EventTypeFlags::MESSAGE_DELETE
-                | EventTypeFlags::MESSAGE_DELETE_BULK
-                | EventTypeFlags::MESSAGE_UPDATE;
         }
     }
 
