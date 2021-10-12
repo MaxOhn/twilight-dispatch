@@ -6,7 +6,9 @@ use crate::{
 };
 
 use futures_util::Stream;
-use std::{collections::HashMap, fmt::Debug, future::Future, pin::Pin, sync::Arc, time::Duration};
+use std::{
+    collections::HashMap, fmt::Debug, future::Future, pin::Pin, slice, sync::Arc, time::Duration,
+};
 use time::{Format, OffsetDateTime};
 use tokio::{
     sync::{
@@ -97,7 +99,7 @@ async fn waiter(mut rx: UnboundedReceiver<Sender<()>>, duration: Duration) {
 
 pub async fn get_clusters(
     resumes: HashMap<u64, ResumeSession>,
-    queue: Arc<Box<dyn Queue>>,
+    queue: Arc<dyn Queue>,
 ) -> ApiResult<(
     Vec<Cluster>,
     Vec<impl Stream<Item = (u64, Event)> + Send + Sync + Unpin + 'static>,
@@ -169,13 +171,13 @@ pub async fn get_clusters(
     Ok((clusters, events))
 }
 
-pub fn get_queue() -> Arc<Box<dyn Queue>> {
+pub fn get_queue() -> Arc<dyn Queue> {
     let concurrency = CONFIG.shards_concurrency as usize;
     let wait = Duration::from_secs(CONFIG.shards_wait);
     if concurrency == 1 {
-        Arc::new(Box::new(LocalQueue::new(wait)))
+        Arc::new(LocalQueue::new(wait))
     } else {
-        Arc::new(Box::new(LargeBotQueue::new(concurrency, wait)))
+        Arc::new(LargeBotQueue::new(concurrency, wait))
     }
 }
 
@@ -250,26 +252,28 @@ pub fn log_discord(cluster: &Cluster, color: usize, message: impl Into<String>) 
     let message = message.into();
 
     tokio::spawn(async move {
+        let embed = Embed {
+            author: None,
+            color: Some(color as u32),
+            description: None,
+            fields: vec![],
+            footer: None,
+            image: None,
+            kind: "rich".to_owned(),
+            provider: None,
+            thumbnail: None,
+            timestamp: Some(OffsetDateTime::now_utc().format(Format::Rfc3339)),
+            title: Some(message),
+            url: None,
+            video: None,
+        };
+
         let message = client
             .create_message(ChannelId(CONFIG.log_channel))
-            .embed(Embed {
-                author: None,
-                color: Some(color as u32),
-                description: None,
-                fields: vec![],
-                footer: None,
-                image: None,
-                kind: "".to_owned(),
-                provider: None,
-                thumbnail: None,
-                timestamp: Some(OffsetDateTime::now_utc().format(Format::Rfc3339)),
-                title: Some(message),
-                url: None,
-                video: None,
-            });
+            .embeds(slice::from_ref(&embed));
 
         if let Ok(message) = message {
-            if let Err(err) = message.await {
+            if let Err(err) = message.exec().await {
                 warn!("Failed to post message to Discord: {:?}", err)
             }
         }
