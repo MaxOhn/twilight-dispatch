@@ -2,8 +2,8 @@ use crate::{
     config::CONFIG,
     constants::{
         channel_key, guild_key, member_key, private_channel_key, role_key, BOT_USER_KEY,
-        CACHE_CLEANUP_INTERVAL, CACHE_DUMP_INTERVAL, CHANNEL_KEY, EXPIRY_KEYS, GUILD_KEY,
-        KEYS_SUFFIX, MESSAGE_KEY, SESSIONS_KEY, STATUSES_KEY,
+        CACHE_DUMP_INTERVAL, CHANNEL_KEY, GUILD_KEY, KEYS_SUFFIX, MESSAGE_KEY, SESSIONS_KEY,
+        STATUSES_KEY,
     },
     models::{ApiError, ApiResult, FormattedDateTime, GuildItem, SessionInfo, StatusInfo},
     utils::{get_keys, to_value},
@@ -12,7 +12,7 @@ use crate::{
 use redis::{AsyncCommands, FromRedisValue, ToRedisArgs};
 use serde::{de::DeserializeOwned, Serialize};
 use simd_json::owned::Value;
-use std::{collections::HashMap, hash::Hash, iter};
+use std::{collections::HashMap, iter};
 use tokio::time::{sleep, Duration};
 use tracing::warn;
 use twilight_gateway::Cluster;
@@ -50,20 +50,6 @@ where
     K: ToRedisArgs + Send + Sync,
 {
     let res = conn.scard(key).await?;
-
-    Ok(res)
-}
-
-pub async fn get_hashmap<K, T, U>(
-    conn: &mut redis::aio::Connection,
-    key: K,
-) -> ApiResult<HashMap<T, U>>
-where
-    K: ToRedisArgs + Send + Sync,
-    T: FromRedisValue + Eq + Hash,
-    U: FromRedisValue,
-{
-    let res = conn.hgetall(key).await?;
 
     Ok(res)
 }
@@ -136,40 +122,6 @@ where
     Ok(())
 }
 
-pub async fn expire<K>(conn: &mut redis::aio::Connection, key: K, expiry: u64) -> ApiResult<()>
-where
-    K: ToRedisArgs + Send + Sync,
-{
-    expire_all(conn, iter::once((key, expiry))).await?;
-
-    Ok(())
-}
-
-pub async fn expire_all<I, K>(conn: &mut redis::aio::Connection, keys: I) -> ApiResult<()>
-where
-    I: IntoIterator<Item = (K, u64)>,
-    K: ToRedisArgs + Send + Sync,
-{
-    let keys = keys
-        .into_iter()
-        .map(|(key, value)| {
-            let timestamp = FormattedDateTime::now() + time::Duration::milliseconds(value as i64);
-
-            simd_json::to_string(&timestamp)
-                .map(|value| (key, value))
-                .map_err(ApiError::from)
-        })
-        .collect::<ApiResult<Vec<(K, String)>>>()?;
-
-    if keys.is_empty() {
-        return Ok(());
-    }
-
-    conn.hset_multiple(EXPIRY_KEYS, keys.as_slice()).await?;
-
-    Ok(())
-}
-
 pub async fn del_all<I, K>(conn: &mut redis::aio::Connection, keys: I) -> ApiResult<()>
 where
     I: IntoIterator<Item = K>,
@@ -233,23 +185,6 @@ pub async fn del(conn: &mut redis::aio::Connection, key: impl AsRef<str>) -> Api
     Ok(())
 }
 
-pub async fn del_hashmap<K>(
-    conn: &mut redis::aio::Connection,
-    key: K,
-    keys: &[String],
-) -> ApiResult<()>
-where
-    K: ToRedisArgs + Send + Sync,
-{
-    if keys.is_empty() {
-        return Ok(());
-    }
-
-    let _: () = conn.hdel(key, keys).await?;
-
-    Ok(())
-}
-
 pub async fn run_jobs(conn: &mut redis::aio::Connection, clusters: &[Cluster]) {
     loop {
         let mut statuses = vec![];
@@ -303,42 +238,6 @@ pub async fn run_jobs(conn: &mut redis::aio::Connection, clusters: &[Cluster]) {
         }
 
         sleep(Duration::from_millis(CACHE_DUMP_INTERVAL as u64)).await;
-    }
-}
-
-pub async fn run_cleanups(conn: &mut redis::aio::Connection) {
-    loop {
-        let hashmap: ApiResult<HashMap<String, String>> = get_hashmap(conn, EXPIRY_KEYS).await;
-
-        match hashmap {
-            Ok(hashmap) => {
-                let mut keys = vec![];
-
-                for (key, mut value) in hashmap {
-                    match simd_json::from_str::<FormattedDateTime>(value.as_mut_str()) {
-                        Ok(timestamp) => {
-                            if (timestamp - FormattedDateTime::now()).is_negative() {
-                                keys.push(key);
-                            }
-                        }
-                        Err(err) => {
-                            warn!("Failed to get expiry timestamp: {:?}", err);
-                        }
-                    }
-                }
-
-                if let Err(err) = del_all(conn, keys.as_slice()).await {
-                    warn!("Failed to delete expired keys: {:?}", err);
-                } else if let Err(err) = del_hashmap(conn, EXPIRY_KEYS, keys.as_slice()).await {
-                    warn!("Failed to delete expired keys hashmap: {:?}", err);
-                }
-            }
-            Err(err) => {
-                warn!("Failed to get expiry keys: {:?}", err);
-            }
-        }
-
-        sleep(Duration::from_millis(CACHE_CLEANUP_INTERVAL as u64)).await;
     }
 }
 
@@ -429,15 +328,6 @@ pub async fn update(
             items.push((guild_key(data.id), GuildItem::Guild(guild)));
 
             set_all(conn, items).await?;
-            if let Some(ttl) = CONFIG.state_member_ttl.filter(|_| CONFIG.state_member) {
-                expire_all(
-                    conn,
-                    data.members
-                        .iter()
-                        .map(|member| (member_key(data.id, member.user.id), ttl)),
-                )
-                .await?;
-            }
         }
         Event::GuildDelete(data) => {
             old = clear_guild(conn, data.id).await?;
@@ -451,9 +341,6 @@ pub async fn update(
             if CONFIG.state_member {
                 let key = member_key(data.guild_id, data.user.id);
                 set(conn, &key, &data).await?;
-                if let Some(ttl) = CONFIG.state_member_ttl {
-                    expire(conn, &key, ttl).await?;
-                }
             }
         }
         Event::MemberRemove(data) => {
@@ -475,9 +362,6 @@ pub async fn update(
                     member.roles = data.roles.clone();
                     member.user = data.user.clone();
                     set(conn, &key, &member).await?;
-                    if let Some(ttl) = CONFIG.state_member_ttl {
-                        expire(conn, &key, ttl).await?;
-                    }
                 }
             }
         }
@@ -490,15 +374,6 @@ pub async fn update(
                         .map(|member| (member_key(data.guild_id, member.user.id), member)),
                 )
                 .await?;
-                if let Some(ttl) = CONFIG.state_member_ttl {
-                    expire_all(
-                        conn,
-                        data.members
-                            .iter()
-                            .map(|member| (member_key(data.guild_id, member.user.id), ttl)),
-                    )
-                    .await?;
-                }
             }
         }
         Event::Ready(data) => {

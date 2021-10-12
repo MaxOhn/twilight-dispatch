@@ -17,10 +17,8 @@ pub const ROLE_KEY: &str = "role";
 pub const MEMBER_KEY: &str = "member";
 
 pub const KEYS_SUFFIX: &str = "_keys";
-pub const EXPIRY_KEYS: &str = "expiry_keys";
 
 pub const CACHE_DUMP_INTERVAL: usize = 1000;
-pub const CACHE_CLEANUP_INTERVAL: usize = 1000;
 pub const METRICS_DUMP_INTERVAL: usize = 1000;
 
 pub const CONNECT_COLOR: usize = 0x1F8B4C;
