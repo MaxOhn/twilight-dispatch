@@ -6,8 +6,6 @@ use crate::{
 };
 
 use futures_util::Stream;
-use serde::Serialize;
-use simd_json::owned::Value;
 use std::{collections::HashMap, fmt::Debug, future::Future, pin::Pin, sync::Arc, time::Duration};
 use time::{Format, OffsetDateTime};
 use tokio::{
@@ -278,55 +276,8 @@ pub fn log_discord(cluster: &Cluster, color: usize, message: impl Into<String>) 
     });
 }
 
-pub fn log_discord_guild(
-    cluster: &Cluster,
-    color: usize,
-    title: impl Into<String>,
-    message: impl Into<String>,
-) {
-    let client = cluster.config().http_client().clone();
-    let title = title.into();
-    let message = message.into();
-
-    tokio::spawn(async move {
-        let message = client
-            .create_message(ChannelId(CONFIG.log_guild_channel))
-            .embed(Embed {
-                author: None,
-                color: Some(color as u32),
-                description: Some(message),
-                fields: vec![],
-                footer: None,
-                image: None,
-                kind: "".to_owned(),
-                provider: None,
-                thumbnail: None,
-                timestamp: Some(OffsetDateTime::now_utc().format(Format::Rfc3339)),
-                title: Some(title),
-                url: None,
-                video: None,
-            });
-
-        if let Ok(message) = message {
-            if let Err(err) = message.await {
-                warn!("Failed to post message to Discord: {:?}", err)
-            }
-        }
-    });
-}
-
 pub fn get_shards() -> u64 {
     CONFIG.shards_end - CONFIG.shards_start + 1
-}
-
-pub fn to_value<T>(value: &T) -> ApiResult<Value>
-where
-    T: Serialize + ?Sized,
-{
-    let mut bytes = simd_json::to_vec(value)?;
-    let result = simd_json::owned::to_value(bytes.as_mut_slice())?;
-
-    Ok(result)
 }
 
 pub fn get_keys(value: &str) -> Vec<&str> {

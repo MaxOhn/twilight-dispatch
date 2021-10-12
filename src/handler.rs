@@ -1,13 +1,10 @@
 use crate::{
     cache,
     config::CONFIG,
-    constants::{
-        CONNECT_COLOR, DISCONNECT_COLOR, EXCHANGE, JOIN_COLOR, LEAVE_COLOR, QUEUE_SEND,
-        READY_COLOR, RESUME_COLOR,
-    },
-    metrics::{GATEWAY_EVENTS, GUILD_EVENTS, SHARD_EVENTS},
+    constants::{CONNECT_COLOR, DISCONNECT_COLOR, EXCHANGE, QUEUE_SEND, READY_COLOR, RESUME_COLOR},
+    metrics::{GATEWAY_EVENTS, SHARD_EVENTS},
     models::{DeliveryInfo, DeliveryOpcode, PayloadInfo},
-    utils::{log_discord, log_discord_guild},
+    utils::log_discord,
 };
 
 use futures_util::{Stream, StreamExt};
@@ -16,7 +13,6 @@ use lapin::{
     types::FieldTable,
     BasicProperties, Channel,
 };
-use simd_json::{json, ValueAccess};
 use std::time::Duration;
 use tokio::time::timeout;
 use tracing::{info, warn};
@@ -33,7 +29,6 @@ pub async fn outgoing(
     let mut bot_id = None;
 
     while let Some((shard, event)) = events.next().await {
-        let mut old = None;
         let shard = shard as usize;
 
         if CONFIG.state_enabled {
@@ -44,15 +39,10 @@ pub async fn outgoing(
             }
 
             if let Some(bot_id) = bot_id {
-                match timeout(
-                    Duration::from_millis(10000),
-                    cache::update(conn, &event, bot_id),
-                )
-                .await
-                {
-                    Ok(Ok(value)) => {
-                        old = value;
-                    }
+                let update_fut = cache::update(conn, &event, bot_id);
+
+                match timeout(Duration::from_millis(10_000), update_fut).await {
+                    Ok(Ok(_)) => {}
                     Ok(Err(err)) => {
                         warn!("[Shard {}] Failed to update state: {:?}", shard, err);
                     }
@@ -136,13 +126,11 @@ pub async fn outgoing(
             }
             Event::ShardPayload(mut data) => {
                 match simd_json::from_slice::<PayloadInfo>(data.bytes.as_mut_slice()) {
-                    Ok(mut payload) => {
+                    Ok(payload) => {
                         if let Some(kind) = payload.t.as_deref() {
                             GATEWAY_EVENTS
                                 .with_label_values(&[kind, shard_strings[shard as usize].as_str()])
                                 .inc();
-
-                            payload.old = old;
 
                             match simd_json::to_vec(&payload) {
                                 Ok(payload) => {
@@ -175,37 +163,6 @@ pub async fn outgoing(
                     Err(err) => {
                         warn!("[Shard {}] Could not decode payload: {:?}", shard, err);
                     }
-                }
-            }
-            Event::GuildCreate(data) => {
-                if old.is_none() {
-                    GUILD_EVENTS.with_label_values(&["Join"]).inc();
-                    log_discord_guild(
-                        cluster,
-                        JOIN_COLOR,
-                        "Guild Join",
-                        format!("{} ({})", data.name, data.id),
-                    );
-                }
-            }
-            Event::GuildDelete(data) => {
-                if !data.unavailable {
-                    GUILD_EVENTS.with_label_values(&["Leave"]).inc();
-                    let old_data = old.unwrap_or(json!({}));
-                    let guild = old_data.as_object().unwrap();
-                    log_discord_guild(
-                        cluster,
-                        LEAVE_COLOR,
-                        "Guild Leave",
-                        format!(
-                            "{} ({})",
-                            guild
-                                .get("name")
-                                .and_then(|name| name.as_str())
-                                .unwrap_or("Unknown"),
-                            guild.get("id").and_then(|id| id.as_str()).unwrap_or("0")
-                        ),
-                    );
                 }
             }
             _ => {}

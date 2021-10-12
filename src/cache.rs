@@ -6,12 +6,11 @@ use crate::{
         STATUSES_KEY,
     },
     models::{ApiError, ApiResult, FormattedDateTime, GuildItem, SessionInfo, StatusInfo},
-    utils::{get_keys, to_value},
+    utils::get_keys,
 };
 
 use redis::{AsyncCommands, FromRedisValue, ToRedisArgs};
 use serde::{de::DeserializeOwned, Serialize};
-use simd_json::owned::Value;
 use std::{collections::HashMap, iter};
 use tokio::time::{sleep, Duration};
 use tracing::warn;
@@ -241,28 +240,21 @@ pub async fn run_jobs(conn: &mut redis::aio::Connection, clusters: &[Cluster]) {
     }
 }
 
-async fn clear_guild<T: DeserializeOwned>(
-    conn: &mut redis::aio::Connection,
-    guild_id: GuildId,
-) -> ApiResult<Option<T>> {
+async fn clear_guild(conn: &mut redis::aio::Connection, guild_id: GuildId) -> ApiResult<()> {
     let members: Vec<String> =
         get_members(conn, format!("{}{}:{}", GUILD_KEY, KEYS_SUFFIX, guild_id)).await?;
 
     del_all(conn, members).await?;
-
-    let guild = get(conn, guild_key(guild_id)).await?;
     del(conn, guild_key(guild_id)).await?;
 
-    Ok(guild)
+    Ok(())
 }
 
 pub async fn update(
     conn: &mut redis::aio::Connection,
     event: &Event,
     bot_id: UserId,
-) -> ApiResult<Option<Value>> {
-    let mut old: Option<Value> = None;
-
+) -> ApiResult<()> {
     match event {
         Event::ChannelCreate(data) => match &data.0 {
             Channel::Private(c) => {
@@ -276,12 +268,10 @@ pub async fn update(
         Event::ChannelDelete(data) => match &data.0 {
             Channel::Private(c) => {
                 let key = private_channel_key(c.id);
-                old = get(conn, &key).await?;
                 del(conn, &key).await?;
             }
             Channel::Guild(c) => {
                 let key = channel_key(c.guild_id().unwrap(), c.id());
-                old = get(conn, &key).await?;
                 del(conn, &key).await?;
             }
             _ => {}
@@ -289,18 +279,16 @@ pub async fn update(
         Event::ChannelUpdate(data) => match &data.0 {
             Channel::Private(c) => {
                 let key = private_channel_key(c.id);
-                old = get(conn, &key).await?;
                 set(conn, &key, c).await?;
             }
             Channel::Guild(c) => {
                 let key = channel_key(c.guild_id().unwrap(), c.id());
-                old = get(conn, &key).await?;
                 set(conn, &key, c).await?;
             }
             _ => {}
         },
         Event::GuildCreate(data) => {
-            old = clear_guild(conn, data.id).await?;
+            clear_guild(conn, data.id).await?;
 
             let mut items = vec![];
             let mut guild = data.clone();
@@ -330,11 +318,10 @@ pub async fn update(
             set_all(conn, items).await?;
         }
         Event::GuildDelete(data) => {
-            old = clear_guild(conn, data.id).await?;
+            clear_guild(conn, data.id).await?;
         }
         Event::GuildUpdate(data) => {
             let key = guild_key(data.id);
-            old = get(conn, &key).await?;
             set(conn, &key, &data).await?;
         }
         Event::MemberAdd(data) => {
@@ -346,7 +333,6 @@ pub async fn update(
         Event::MemberRemove(data) => {
             if CONFIG.state_member {
                 let key = member_key(data.guild_id, data.user.id);
-                old = get(conn, &key).await?;
                 del(conn, &key).await?;
             }
         }
@@ -355,7 +341,6 @@ pub async fn update(
                 let key = member_key(data.guild_id, data.user.id);
                 let member: Option<Member> = get(conn, &key).await?;
                 if let Some(mut member) = member {
-                    old = Some(to_value(&member)?);
                     member.joined_at = Some(data.joined_at.clone());
                     member.nick = data.nick.clone();
                     member.premium_since = data.premium_since.clone();
@@ -389,24 +374,21 @@ pub async fn update(
         }
         Event::RoleDelete(data) => {
             let key = role_key(data.guild_id, data.role_id);
-            old = get(conn, &key).await?;
             del(conn, &key).await?;
         }
         Event::RoleUpdate(data) => {
             let key = role_key(data.guild_id, data.role.id);
-            old = get(conn, &key).await?;
             set(conn, &key, &data.role).await?;
         }
         Event::UnavailableGuild(data) => {
-            old = clear_guild(conn, data.id).await?;
+            clear_guild(conn, data.id).await?;
             set(conn, guild_key(data.id), data).await?;
         }
         Event::UserUpdate(data) => {
-            old = get(conn, BOT_USER_KEY).await?;
             set(conn, BOT_USER_KEY, &data).await?;
         }
         _ => {}
     }
 
-    Ok(old)
+    Ok(())
 }
