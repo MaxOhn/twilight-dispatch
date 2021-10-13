@@ -11,7 +11,7 @@ use tokio::{
         mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender},
         oneshot::{self, Sender},
     },
-    time::sleep,
+    time::{interval, MissedTickBehavior},
 };
 use tracing::warn;
 use twilight_gateway::{
@@ -85,11 +85,16 @@ impl Queue for LargeBotQueue {
 }
 
 async fn waiter(mut rx: UnboundedReceiver<Sender<()>>, duration: Duration) {
+    let mut interval = interval(duration);
+    interval.set_missed_tick_behavior(MissedTickBehavior::Delay);
+    interval.tick().await;
+
     while let Some(req) = rx.recv().await {
         if let Err(err) = req.send(()) {
             warn!("skipping, send failed: {:?}", err);
         }
-        sleep(duration).await;
+
+        interval.tick().await;
     }
 }
 

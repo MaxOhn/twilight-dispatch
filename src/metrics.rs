@@ -17,8 +17,9 @@ use std::{
     net::{IpAddr, SocketAddr},
     str::FromStr,
     sync::Arc,
+    time::Duration,
 };
-use tokio::time::{sleep, Duration};
+use tokio::time;
 use tracing::warn;
 use twilight_gateway::{shard::Stage, Cluster};
 
@@ -106,7 +107,11 @@ pub async fn run_server() -> ApiResult<()> {
 }
 
 pub async fn run_jobs(cache: Arc<Cache>, clusters: Vec<Cluster>) {
+    let mut interval = time::interval(Duration::from_millis(METRICS_DUMP_INTERVAL as u64));
+
     loop {
+        interval.tick().await;
+
         let mut shards = vec![];
         for cluster in &clusters {
             shards.append(&mut cluster.shards())
@@ -156,8 +161,5 @@ pub async fn run_jobs(cache: Arc<Cache>, clusters: Vec<Cluster>) {
                 warn!("Failed to get state stats: {:?}", err);
             }
         }
-
-        // TODO
-        sleep(Duration::from_millis(METRICS_DUMP_INTERVAL as u64)).await;
     }
 }
