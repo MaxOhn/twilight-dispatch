@@ -5,7 +5,7 @@ use futures_util::Stream;
 use std::{
     collections::HashMap, fmt::Debug, future::Future, pin::Pin, slice, sync::Arc, time::Duration,
 };
-use time::{Format, OffsetDateTime};
+use time::{format_description::well_known::Rfc3339, OffsetDateTime};
 use tokio::{
     sync::{
         mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender},
@@ -260,7 +260,7 @@ pub fn log_discord(cluster: &Cluster, color: usize, message: impl Into<String>) 
             kind: "rich".to_owned(),
             provider: None,
             thumbnail: None,
-            timestamp: Some(OffsetDateTime::now_utc().format(Format::Rfc3339)),
+            timestamp: OffsetDateTime::now_utc().format(&Rfc3339).ok(),
             title: Some(message),
             url: None,
             video: None,

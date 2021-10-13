@@ -1,8 +1,12 @@
 use bathbot_cache::CacheError;
 use hyper::{http::Error as HyperHTTPError, Error as HyperError};
 use lapin::Error as LapinError;
+use lazy_static::lazy_static;
 use prometheus::Error as PrometheusError;
-use serde::{de::Error as SerdeDeError, Deserialize, Deserializer, Serialize, Serializer};
+use serde::{
+    de::Error as SerdeDeError, ser::Error as SerdeSerError, Deserialize, Deserializer, Serialize,
+    Serializer,
+};
 use serde_repr::{Deserialize_repr, Serialize_repr};
 use simd_json::{owned::Value, Error as SimdJsonError};
 use std::{
@@ -14,7 +18,10 @@ use std::{
     num::ParseIntError,
     ops::{Add, Sub},
 };
-use time::{Duration, OffsetDateTime};
+use time::{
+    format_description::{self, FormatItem},
+    Duration, OffsetDateTime,
+};
 use twilight_gateway::{cluster::ClusterStartError, shard::LargeThresholdError};
 use twilight_model::{
     channel::{permission_overwrite::PermissionOverwrite, GuildChannel},
@@ -53,12 +60,24 @@ impl Add<Duration> for FormattedDateTime {
     }
 }
 
+lazy_static! {
+    static ref DATE_FORMAT_SER: Vec<FormatItem<'static>> =
+        format_description::parse("%FT%T.%N").unwrap();
+    static ref DATE_FORMAT_DE: Vec<FormatItem<'static>> =
+        format_description::parse("%FT%T.%N%z").unwrap();
+}
+
 impl Serialize for FormattedDateTime {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
     {
-        serializer.serialize_str(&self.0.format("%FT%T.%N"))
+        let date = self
+            .0
+            .format(&DATE_FORMAT_SER)
+            .map_err(SerdeSerError::custom)?;
+
+        serializer.serialize_str(&date)
     }
 }
 
@@ -67,8 +86,10 @@ impl<'de> Deserialize<'de> for FormattedDateTime {
     where
         D: Deserializer<'de>,
     {
-        let string = String::deserialize(deserializer)?;
-        match OffsetDateTime::parse(string + "+0000", "%FT%T.%N%z") {
+        let mut string = String::deserialize(deserializer)?;
+        string.push_str("+0000");
+
+        match OffsetDateTime::parse(&string, &DATE_FORMAT_DE) {
             Ok(dt) => Ok(Self(dt)),
             Err(_) => Err(SerdeDeError::custom("not a valid formatted timestamp")),
         }
@@ -78,8 +99,10 @@ impl<'de> Deserialize<'de> for FormattedDateTime {
     where
         D: Deserializer<'de>,
     {
-        let string = String::deserialize(deserializer)?;
-        match OffsetDateTime::parse(string + "+0000", "%FT%T.%N%z") {
+        let mut string = String::deserialize(deserializer)?;
+        string.push_str("+0000");
+
+        match OffsetDateTime::parse(&string, &DATE_FORMAT_DE) {
             Ok(dt) => {
                 place.0 = dt;
                 Ok(())
