@@ -5,13 +5,14 @@ authors = ["CHamburr <hi@chamburr.xyz>"]
 edition = "2018"
 
 [dependencies]
+bathbot-cache = { path = "../bathbot-cache" }
 dotenv = { version = "0.15", default-features = false }
 futures-util = { version = "0.3", default-features = false }
+hashbrown = { version = "0.11", default-features = false, features = ["ahash", "inline-more", "serde"] }
 hyper = { version = "0.14", default-features = false, features = ["server", "tcp", "http1"] }
 lapin = { version = "1.6", default-features = false }
 lazy_static = { version = "1.4", default-features = false }
 prometheus = { version = "0.12", default-features = false, features = ["process"] }
-redis = { version = "0.20", default-features = false, features = ["tokio-comp"] }
 serde = { version = "1.0", default-features = false }
 serde_repr = { version = "0.1", default-features = false }
 simd-json = { version = "0.4", default-features = false, features = ["serde_impl"] }

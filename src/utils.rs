@@ -1,10 +1,6 @@
-use crate::{
-    cache,
-    config::CONFIG,
-    constants::{SESSIONS_KEY, SHARDS_KEY},
-    models::{ApiResult, SessionInfo},
-};
+use crate::{config::CONFIG, models::ApiResult};
 
+use bathbot_cache::Cache;
 use futures_util::Stream;
 use std::{
     collections::HashMap, fmt::Debug, future::Future, pin::Pin, slice, sync::Arc, time::Duration,
@@ -181,31 +177,31 @@ pub fn get_queue() -> Arc<dyn Queue> {
     }
 }
 
-pub async fn get_resume_sessions(
-    conn: &mut redis::aio::Connection,
-) -> ApiResult<HashMap<u64, ResumeSession>> {
-    let shards: u64 = cache::get(conn, SHARDS_KEY).await?.unwrap_or_default();
+pub async fn get_resume_sessions(cache: &Cache) -> ApiResult<HashMap<u64, ResumeSession>> {
+    let shards = cache.shards().await?.unwrap_or_default();
+
     if shards != CONFIG.shards_total || !CONFIG.resume {
         return Ok(HashMap::new());
     }
 
-    let sessions: HashMap<String, SessionInfo> =
-        cache::get(conn, SESSIONS_KEY).await?.unwrap_or_default();
-
-    Ok(sessions
+    let sessions = cache
+        .sessions()
+        .await?
+        .unwrap_or_default()
         .into_iter()
         .map(|(k, v)| {
-            (
-                k.parse().unwrap(),
-                ResumeSession {
-                    session_id: v.session_id,
-                    sequence: v.sequence,
-                },
-            )
-        })
-        .collect())
+            let session = ResumeSession {
+                session_id: v.session_id,
+                sequence: v.sequence,
+            };
+
+            (k.parse().unwrap(), session)
+        });
+
+    Ok(sessions.collect())
 }
 
+// TODO
 pub fn get_event_flags() -> EventTypeFlags {
     EventTypeFlags::GATEWAY_HELLO
         | EventTypeFlags::GATEWAY_INVALIDATE_SESSION
@@ -278,8 +274,4 @@ pub fn log_discord(cluster: &Cluster, color: usize, message: impl Into<String>) 
 
 pub fn get_shards() -> u64 {
     CONFIG.shards_end - CONFIG.shards_start + 1
-}
-
-pub fn get_keys(value: &str) -> Vec<&str> {
-    return value.split(':').collect();
 }

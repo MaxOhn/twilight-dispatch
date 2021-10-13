@@ -1,7 +1,7 @@
+use bathbot_cache::CacheError;
 use hyper::{http::Error as HyperHTTPError, Error as HyperError};
 use lapin::Error as LapinError;
 use prometheus::Error as PrometheusError;
-use redis::RedisError;
 use serde::{de::Error as SerdeDeError, Deserialize, Deserializer, Serialize, Serializer};
 use serde_repr::{Deserialize_repr, Serialize_repr};
 use simd_json::{owned::Value, Error as SimdJsonError};
@@ -27,11 +27,7 @@ use twilight_model::{
 #[derive(Debug, Clone)]
 pub struct FormattedDateTime(OffsetDateTime);
 
-impl FormattedDateTime {
-    pub fn now() -> Self {
-        Self(OffsetDateTime::now_utc())
-    }
-}
+impl FormattedDateTime {}
 
 impl Sub<Duration> for FormattedDateTime {
     type Output = Self;
@@ -138,62 +134,7 @@ pub enum CachedGuildChannel {
     PublicThread(CachedThread),
 }
 
-impl CachedGuildChannel {
-    pub const fn guild_id(&self) -> Option<GuildId> {
-        match self {
-            Self::Text(c) => c.guild_id,
-            Self::PrivateThread(c) => c.guild_id,
-            Self::PublicThread(c) => c.guild_id,
-        }
-    }
-
-    pub const fn id(&self) -> ChannelId {
-        match self {
-            Self::Text(c) => c.id,
-            Self::PrivateThread(c) => c.id,
-            Self::PublicThread(c) => c.id,
-        }
-    }
-
-    pub fn try_from(channel: &GuildChannel) -> Option<Self> {
-        match channel {
-            GuildChannel::Category(_) => None,
-            GuildChannel::NewsThread(_) => None,
-            GuildChannel::PrivateThread(c) => {
-                let channel = CachedThread {
-                    guild_id: c.guild_id,
-                    id: c.id,
-                    name: c.name.to_owned(),
-                    parent_id: c.parent_id,
-                };
-
-                Some(Self::PrivateThread(channel))
-            }
-            GuildChannel::PublicThread(c) => {
-                let channel = CachedThread {
-                    guild_id: c.guild_id,
-                    id: c.id,
-                    name: c.name.to_owned(),
-                    parent_id: c.parent_id,
-                };
-
-                Some(Self::PublicThread(channel))
-            }
-            GuildChannel::Text(c) => {
-                let channel = CachedTextChannel {
-                    guild_id: c.guild_id,
-                    id: c.id,
-                    name: c.name.to_owned(),
-                    permission_overwrites: c.permission_overwrites.to_owned(),
-                };
-
-                Some(Self::Text(channel))
-            }
-            GuildChannel::Voice(_) => None,
-            GuildChannel::Stage(_) => None,
-        }
-    }
-}
+impl CachedGuildChannel {}
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct CachedTextChannel {
@@ -284,16 +225,7 @@ pub struct IntermediateMember {
     pub roles: Vec<RoleId>,
 }
 
-impl IntermediateMember {
-    pub fn into_member(self, guild_id: GuildId, user_id: UserId) -> CachedMember {
-        CachedMember {
-            guild_id,
-            nick: self.nick,
-            roles: self.roles,
-            user_id,
-        }
-    }
-}
+impl IntermediateMember {}
 
 #[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
 pub struct CachedRole {
@@ -399,7 +331,7 @@ pub type ApiResult<T> = Result<T, ApiError>;
 pub enum ApiError {
     Empty(()),
     SimdJson(SimdJsonError),
-    Redis(RedisError),
+    Cache(CacheError),
     Var(VarError),
     ParseInt(ParseIntError),
     Lapin(LapinError),
@@ -429,12 +361,6 @@ impl From<()> for ApiError {
 impl From<SimdJsonError> for ApiError {
     fn from(err: SimdJsonError) -> Self {
         Self::SimdJson(err)
-    }
-}
-
-impl From<RedisError> for ApiError {
-    fn from(err: RedisError) -> Self {
-        Self::Redis(err)
     }
 }
 
@@ -477,6 +403,12 @@ impl From<HyperError> for ApiError {
 impl From<HyperHTTPError> for ApiError {
     fn from(err: HyperHTTPError) -> Self {
         Self::HyperHttp(err)
+    }
+}
+
+impl From<CacheError> for ApiError {
+    fn from(err: CacheError) -> Self {
+        Self::Cache(err)
     }
 }
 

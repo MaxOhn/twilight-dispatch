@@ -1,10 +1,6 @@
-use crate::{
-    cache,
-    config::CONFIG,
-    constants::{CHANNEL_KEY, GUILD_KEY, KEYS_SUFFIX, MEMBER_KEY, METRICS_DUMP_INTERVAL, ROLE_KEY},
-    models::ApiResult,
-};
+use crate::{config::CONFIG, constants::METRICS_DUMP_INTERVAL, models::ApiResult};
 
+use bathbot_cache::Cache;
 use hyper::{
     header::CONTENT_TYPE,
     server::Server,
@@ -20,6 +16,7 @@ use std::{
     collections::HashMap,
     net::{IpAddr, SocketAddr},
     str::FromStr,
+    sync::Arc,
 };
 use tokio::time::{sleep, Duration};
 use tracing::warn;
@@ -108,31 +105,10 @@ pub async fn run_server() -> ApiResult<()> {
     Err(().into())
 }
 
-struct StateStats {
-    guilds: u64,
-    channels: u64,
-    roles: u64,
-    members: u64,
-}
-
-async fn get_state_stats(conn: &mut redis::aio::Connection) -> ApiResult<StateStats> {
-    let guilds = cache::get_members_len(conn, format!("{}{}", GUILD_KEY, KEYS_SUFFIX)).await?;
-    let channels = cache::get_members_len(conn, format!("{}{}", CHANNEL_KEY, KEYS_SUFFIX)).await?;
-    let roles = cache::get_members_len(conn, format!("{}{}", ROLE_KEY, KEYS_SUFFIX)).await?;
-    let members = cache::get_members_len(conn, format!("{}{}", MEMBER_KEY, KEYS_SUFFIX)).await?;
-
-    Ok(StateStats {
-        guilds,
-        channels,
-        roles,
-        members,
-    })
-}
-
-pub async fn run_jobs(conn: &mut redis::aio::Connection, clusters: &[Cluster]) {
+pub async fn run_jobs(cache: Arc<Cache>, clusters: Vec<Cluster>) {
     loop {
         let mut shards = vec![];
-        for cluster in clusters {
+        for cluster in &clusters {
             shards.append(&mut cluster.shards())
         }
 
@@ -169,7 +145,7 @@ pub async fn run_jobs(conn: &mut redis::aio::Connection, clusters: &[Cluster]) {
                 .set(amount);
         }
 
-        match get_state_stats(conn).await {
+        match cache.stats().await {
             Ok(stats) => {
                 STATE_GUILDS.set(stats.guilds as i64);
                 STATE_CHANNELS.set(stats.channels as i64);
@@ -181,6 +157,7 @@ pub async fn run_jobs(conn: &mut redis::aio::Connection, clusters: &[Cluster]) {
             }
         }
 
+        // TODO
         sleep(Duration::from_millis(METRICS_DUMP_INTERVAL as u64)).await;
     }
 }

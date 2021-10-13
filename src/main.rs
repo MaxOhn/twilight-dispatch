@@ -3,24 +3,27 @@
 // https://github.com/rust-lang/rust-clippy/issues/7422
 #![allow(clippy::nonstandard_macro_braces)]
 
+use std::sync::Arc;
+
 use crate::{
     config::CONFIG,
-    constants::{EXCHANGE, QUEUE_RECV, QUEUE_SEND, SESSIONS_KEY, SHARDS_KEY, STARTED_KEY},
-    models::{ApiResult, FormattedDateTime, SessionInfo},
+    constants::{EXCHANGE, QUEUE_RECV, QUEUE_SEND},
+    models::ApiResult,
     utils::{get_clusters, get_queue, get_resume_sessions, get_shards},
 };
 
+use bathbot_cache::{model::SessionInfo, Cache};
 use dotenv::dotenv;
+use hashbrown::HashMap;
 use lapin::{
     options::{ExchangeDeclareOptions, QueueBindOptions, QueueDeclareOptions},
     types::FieldTable,
     ExchangeKind,
 };
-use std::collections::HashMap;
-use tokio::{join, signal::ctrl_c};
+use tokio::signal::ctrl_c;
 use tracing::{error, info};
 
-mod cache;
+// mod cache;
 mod config;
 mod constants;
 mod handler;
@@ -41,12 +44,7 @@ async fn main() {
 }
 
 async fn real_main() -> ApiResult<()> {
-    let redis = redis::Client::open(format!(
-        "redis://{}:{}/",
-        CONFIG.redis_host, CONFIG.redis_port
-    ))?;
-
-    let mut conn = redis.get_async_connection().await?;
+    let cache = Arc::new(Cache::new(&CONFIG.redis_host, CONFIG.redis_port)?);
 
     let amqp = lapin::Connection::connect(
         format!(
@@ -116,7 +114,7 @@ async fn real_main() -> ApiResult<()> {
     }
 
     let shards = get_shards();
-    let resumes = get_resume_sessions(&mut conn).await?;
+    let resumes = get_resume_sessions(&cache).await?;
     let resumes_len = resumes.len();
     let queue = get_queue();
     let (clusters, events) = get_clusters(resumes, queue).await?;
@@ -125,35 +123,31 @@ async fn real_main() -> ApiResult<()> {
     info!("Starting up {} shards", shards);
     info!("Resuming {} sessions", resumes_len);
 
-    cache::set(&mut conn, STARTED_KEY, &FormattedDateTime::now()).await?;
-    cache::set(&mut conn, SHARDS_KEY, &CONFIG.shards_total).await?;
+    cache.cache_shards(CONFIG.shards_total).await?;
 
-    tokio::spawn(async {
-        let _ = metrics::run_server().await;
-    });
+    tokio::spawn(metrics::run_server());
 
-    let mut conn_clone = redis.get_async_connection().await?;
-    let mut conn_clone_two = redis.get_async_connection().await?;
+    let cache_clone = Arc::clone(&cache);
     let clusters_clone = clusters.clone();
-    tokio::spawn(async move {
-        join!(
-            cache::run_jobs(&mut conn_clone, clusters_clone.as_slice()),
-            metrics::run_jobs(&mut conn_clone_two, clusters_clone.as_slice()),
-        )
-    });
+    tokio::spawn(metrics::run_jobs(cache_clone, clusters_clone));
 
     for (cluster, events) in clusters.clone().into_iter().zip(events.into_iter()) {
         let cluster_clone = cluster.clone();
+
         tokio::spawn(async move {
             cluster_clone.up().await;
         });
 
-        let mut conn_clone = redis.get_async_connection().await?;
+        let cache_clone = Arc::clone(&cache);
         let cluster_clone = cluster.clone();
         let channel_clone = channel.clone();
-        tokio::spawn(async move {
-            handler::outgoing(&mut conn_clone, &cluster_clone, &channel_clone, events).await;
-        });
+
+        tokio::spawn(handler::outgoing(
+            cache_clone,
+            cluster_clone,
+            channel_clone,
+            events,
+        ));
     }
 
     let channel_clone = channel_send.clone();
@@ -167,6 +161,7 @@ async fn real_main() -> ApiResult<()> {
     info!("Shutting down");
 
     let mut sessions = HashMap::new();
+
     for cluster in clusters {
         for (key, value) in cluster.down_resumable().into_iter() {
             sessions.insert(
@@ -179,7 +174,7 @@ async fn real_main() -> ApiResult<()> {
         }
     }
 
-    cache::set(&mut conn, SESSIONS_KEY, &sessions).await?;
+    cache.cache_sessions(&sessions).await?;
 
     Ok(())
 }

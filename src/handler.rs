@@ -1,5 +1,4 @@
 use crate::{
-    cache,
     config::CONFIG,
     constants::{CONNECT_COLOR, DISCONNECT_COLOR, EXCHANGE, QUEUE_SEND, READY_COLOR, RESUME_COLOR},
     metrics::{GATEWAY_EVENTS, SHARD_EVENTS},
@@ -7,31 +6,30 @@ use crate::{
     utils::log_discord,
 };
 
+use bathbot_cache::Cache;
 use futures_util::{Stream, StreamExt};
 use lapin::{
     options::{BasicAckOptions, BasicConsumeOptions, BasicPublishOptions},
     types::FieldTable,
     BasicProperties, Channel,
 };
-use std::time::Duration;
+use std::{sync::Arc, time::Duration};
 use tokio::time::timeout;
 use tracing::{info, warn};
 use twilight_gateway::{Cluster, Event};
 
-pub async fn outgoing(
-    conn: &mut redis::aio::Connection,
-    cluster: &Cluster,
-    channel: &lapin::Channel,
-    mut events: impl Stream<Item = (u64, Event)> + Send + Sync + Unpin + 'static,
-) {
+const UPDATE_TIMEOUT: Duration = Duration::from_millis(10_000);
+
+pub async fn outgoing<E>(cache: Arc<Cache>, cluster: Cluster, channel: Channel, mut events: E)
+where
+    E: Stream<Item = (u64, Event)> + Send + Sync + Unpin + 'static,
+{
     let shard_strings: Vec<String> = (0..CONFIG.shards_total).map(|x| x.to_string()).collect();
 
     while let Some((shard, event)) = events.next().await {
         let shard = shard as usize;
 
-        let update_fut = cache::update(conn, &event);
-
-        match timeout(Duration::from_millis(10_000), update_fut).await {
+        match timeout(UPDATE_TIMEOUT, cache.update(&event)).await {
             Ok(Ok(_)) => {}
             Ok(Err(err)) => {
                 warn!("[Shard {}] Failed to update state: {:?}", shard, err);
@@ -50,7 +48,7 @@ pub async fn outgoing(
             }
             Event::Ready(data) => {
                 info!("[Shard {}] Ready (session: {})", shard, data.session_id);
-                log_discord(cluster, READY_COLOR, format!("[Shard {}] Ready", shard));
+                log_discord(&cluster, READY_COLOR, format!("[Shard {}] Ready", shard));
                 SHARD_EVENTS.with_label_values(&["Ready"]).inc();
             }
             Event::Resumed => {
@@ -63,13 +61,13 @@ pub async fn outgoing(
                 } else {
                     info!("[Shard {}] Resumed", shard);
                 }
-                log_discord(cluster, RESUME_COLOR, format!("[Shard {}] Resumed", shard));
+                log_discord(&cluster, RESUME_COLOR, format!("[Shard {}] Resumed", shard));
                 SHARD_EVENTS.with_label_values(&["Resumed"]).inc();
             }
             Event::ShardConnected(_) => {
                 info!("[Shard {}] Connected", shard);
                 log_discord(
-                    cluster,
+                    &cluster,
                     CONNECT_COLOR,
                     format!("[Shard {}] Connected", shard),
                 );
@@ -94,7 +92,7 @@ pub async fn outgoing(
                     info!("[Shard {}] Disconnected", shard);
                 }
                 log_discord(
-                    cluster,
+                    &cluster,
                     DISCONNECT_COLOR,
                     format!("[Shard {}] Disconnected", shard),
                 );
