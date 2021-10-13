@@ -67,6 +67,8 @@ lazy_static! {
         register_int_gauge!("state_roles", "Number of roles in state cache").unwrap();
     pub static ref STATE_MEMBERS: IntGauge =
         register_int_gauge!("state_members", "Number of members in state cache").unwrap();
+    pub static ref STATE_USERS: IntGauge =
+        register_int_gauge!("state_users", "Number of users in state cache").unwrap();
 }
 
 async fn serve(req: Request<Body>) -> ApiResult<Response<Body>> {
@@ -112,7 +114,8 @@ pub async fn run_jobs(cache: Arc<Cache>, clusters: Vec<Cluster>) {
     loop {
         interval.tick().await;
 
-        let mut shards = vec![];
+        let mut shards = Vec::new();
+
         for cluster in &clusters {
             shards.append(&mut cluster.shards())
         }
@@ -120,11 +123,11 @@ pub async fn run_jobs(cache: Arc<Cache>, clusters: Vec<Cluster>) {
         GATEWAY_SHARDS.set(shards.len() as i64);
 
         let mut statuses = HashMap::new();
-        statuses.insert(format!("{}", Stage::Connected), 0);
-        statuses.insert(format!("{}", Stage::Disconnected), 0);
-        statuses.insert(format!("{}", Stage::Handshaking), 0);
-        statuses.insert(format!("{}", Stage::Identifying), 0);
-        statuses.insert(format!("{}", Stage::Resuming), 0);
+        statuses.insert(Stage::Connected, 0);
+        statuses.insert(Stage::Disconnected, 0);
+        statuses.insert(Stage::Handshaking, 0);
+        statuses.insert(Stage::Identifying, 0);
+        statuses.insert(Stage::Resuming, 0);
 
         for shard in shards {
             if let Ok(info) = shard.info() {
@@ -138,13 +141,15 @@ pub async fn run_jobs(cache: Arc<Cache>, clusters: Vec<Cluster>) {
                             .unwrap_or_default(),
                     );
 
-                if let Some(count) = statuses.get_mut(&info.stage().to_string()) {
+                if let Some(count) = statuses.get_mut(&info.stage()) {
                     *count += 1;
                 }
             }
         }
 
         for (stage, amount) in statuses {
+            let stage = stage.to_string();
+
             GATEWAY_STATUSES
                 .with_label_values(&[stage.as_str()])
                 .set(amount);
@@ -156,6 +161,7 @@ pub async fn run_jobs(cache: Arc<Cache>, clusters: Vec<Cluster>) {
                 STATE_CHANNELS.set(stats.channels as i64);
                 STATE_ROLES.set(stats.roles as i64);
                 STATE_MEMBERS.set(stats.members as i64);
+                STATE_USERS.set(stats.users as i64);
             }
             Err(err) => {
                 warn!("Failed to get state stats: {:?}", err);
