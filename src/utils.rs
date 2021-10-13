@@ -201,7 +201,6 @@ pub async fn get_resume_sessions(cache: &Cache) -> ApiResult<HashMap<u64, Resume
     Ok(sessions.collect())
 }
 
-// TODO
 pub fn get_event_flags() -> EventTypeFlags {
     EventTypeFlags::GATEWAY_HELLO
         | EventTypeFlags::GATEWAY_INVALIDATE_SESSION
@@ -234,8 +233,10 @@ pub fn get_event_flags() -> EventTypeFlags {
         | EventTypeFlags::ROLE_UPDATE
         | EventTypeFlags::THREAD_CREATE
         | EventTypeFlags::THREAD_DELETE
+        | EventTypeFlags::THREAD_LIST_SYNC
+        | EventTypeFlags::THREAD_MEMBERS_UPDATE
+        | EventTypeFlags::THREAD_MEMBER_UPDATE
         | EventTypeFlags::THREAD_UPDATE
-        | EventTypeFlags::UNAVAILABLE_GUILD
         | EventTypeFlags::USER_UPDATE
 }
 
