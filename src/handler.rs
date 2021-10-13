@@ -14,9 +14,13 @@ use lapin::{
     BasicProperties, Channel,
 };
 use std::{sync::Arc, time::Duration};
-use tokio::time::timeout;
+use tokio::{
+    sync::mpsc,
+    time::{interval, timeout, MissedTickBehavior},
+};
 use tracing::{info, warn};
 use twilight_gateway::{Cluster, Event};
+use twilight_model::gateway::payload::RequestGuildMembers;
 
 const UPDATE_TIMEOUT: Duration = Duration::from_millis(10_000);
 
@@ -26,9 +30,24 @@ where
 {
     let shard_strings: Vec<String> = (0..CONFIG.shards_total).map(|x| x.to_string()).collect();
 
-    while let Some((shard, event)) = events.next().await {
-        let shard = shard as usize;
+    let (tx, mut rx) = mpsc::channel(10_000);
+    let member_cluster = cluster.clone();
 
+    tokio::spawn(async move {
+        let mut interval = interval(Duration::from_millis(100));
+        interval.set_missed_tick_behavior(MissedTickBehavior::Delay);
+
+        while let Some((guild, shard)) = rx.recv().await {
+            interval.tick().await;
+            let req = RequestGuildMembers::builder(guild).query("", None);
+
+            if let Err(why) = member_cluster.command(shard, &req).await {
+                warn!("Failed to request members for guild {}: {}", guild, why);
+            }
+        }
+    });
+
+    while let Some((shard, event)) = events.next().await {
         match timeout(UPDATE_TIMEOUT, cache.update(&event)).await {
             Ok(Ok(_)) => {}
             Ok(Err(err)) => {
@@ -45,6 +64,11 @@ where
             }
             Event::GatewayInvalidateSession(data) => {
                 info!("[Shard {}] Invalid Session (resumable: {})", shard, data);
+            }
+            Event::GuildCreate(e) => {
+                if let Err(why) = tx.send((e.id, shard)).await {
+                    warn!("Failed to forward member request: {}", why);
+                }
             }
             Event::Ready(data) => {
                 info!("[Shard {}] Ready (session: {})", shard, data.session_id);
