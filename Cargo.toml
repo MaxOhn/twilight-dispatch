@@ -5,8 +5,9 @@ authors = ["CHamburr <hi@chamburr.xyz>"]
 edition = "2018"
 
 [dependencies]
-bathbot-cache = { git = "https://github.com/MaxOhn/bathbot-cache" }
+bathbot-cache = { git = "https://github.com/MaxOhn/bathbot-cache", branch = "main" }
 dotenv = { version = "0.15", default-features = false }
+flate2 = { version = "1.0", default-features = false, features = ["zlib"] } # required for twilight-gateway
 futures-util = { version = "0.3", default-features = false }
 hashbrown = { version = "0.11", default-features = false, features = ["ahash", "inline-more", "serde"] }
 hyper = { version = "0.14", default-features = false, features = ["server", "tcp", "http1"] }
@@ -20,8 +21,7 @@ time = { version = "0.3", default-features = false, features = ["formatting", "p
 tokio = { version = "1.2", default-features = false, features = ["rt-multi-thread", "macros", "signal", "time"] }
 tracing = { version = "0.1", default-features = false }
 tracing-subscriber = { version = "0.2", default-features = false, features = ["ansi", "fmt"] }
-# twilight-gateway = { version = "0.6", default-features = false, features = ["compression", "rustls-webpki-roots"] }
-twilight-gateway = { version = "0.6" }
+twilight-gateway = { version = "0.6", default-features = false, features = ["compression", "rustls-webpki-roots"] }
 twilight-model = { version = "0.6", default-features = false }
 
 [patch.crates-io]
