@@ -134,8 +134,8 @@ where
                 info!("[Shard {}] Resuming (sequence: {})", shard, data.seq);
                 SHARD_EVENTS.with_label_values(&["Resuming"]).inc();
             }
-            Event::ShardPayload(mut data) => {
-                match serde_json::from_slice::<PayloadInfo>(data.bytes.as_mut_slice()) {
+            Event::ShardPayload(data) => {
+                match serde_json::from_slice::<PayloadInfo>(data.bytes.as_slice()) {
                     Ok(payload) => {
                         if let Some(kind) = payload.t.as_deref() {
                             GATEWAY_EVENTS
@@ -202,11 +202,11 @@ pub async fn incoming(clusters: &[Cluster], channel: &Channel) {
 
     while let Some(message) = consumer.next().await {
         match message {
-            Ok((channel, mut delivery)) => {
+            Ok((channel, delivery)) => {
                 let _ = channel
                     .basic_ack(delivery.delivery_tag, BasicAckOptions::default())
                     .await;
-                match serde_json::from_slice::<DeliveryInfo>(delivery.data.as_mut_slice()) {
+                match serde_json::from_slice::<DeliveryInfo>(delivery.data.as_slice()) {
                     Ok(payload) => {
                         let cluster = clusters
                             .iter()
