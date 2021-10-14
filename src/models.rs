@@ -7,8 +7,8 @@ use serde::{
     de::Error as SerdeDeError, ser::Error as SerdeSerError, Deserialize, Deserializer, Serialize,
     Serializer,
 };
+use serde_json::{Error as SerdeJsonError, Value};
 use serde_repr::{Deserialize_repr, Serialize_repr};
-use simd_json::{owned::Value, Error as SimdJsonError};
 use std::{
     env::VarError,
     error::Error,
@@ -353,7 +353,7 @@ pub type ApiResult<T> = Result<T, ApiError>;
 #[derive(Debug)]
 pub enum ApiError {
     Empty(()),
-    SimdJson(SimdJsonError),
+    SerdeJson(SerdeJsonError),
     Cache(CacheError),
     Var(VarError),
     ParseInt(ParseIntError),
@@ -381,9 +381,9 @@ impl From<()> for ApiError {
     }
 }
 
-impl From<SimdJsonError> for ApiError {
-    fn from(err: SimdJsonError) -> Self {
-        Self::SimdJson(err)
+impl From<SerdeJsonError> for ApiError {
+    fn from(err: SerdeJsonError) -> Self {
+        Self::SerdeJson(err)
     }
 }
 

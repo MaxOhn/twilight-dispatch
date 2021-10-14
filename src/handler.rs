@@ -135,14 +135,14 @@ where
                 SHARD_EVENTS.with_label_values(&["Resuming"]).inc();
             }
             Event::ShardPayload(mut data) => {
-                match simd_json::from_slice::<PayloadInfo>(data.bytes.as_mut_slice()) {
+                match serde_json::from_slice::<PayloadInfo>(data.bytes.as_mut_slice()) {
                     Ok(payload) => {
                         if let Some(kind) = payload.t.as_deref() {
                             GATEWAY_EVENTS
                                 .with_label_values(&[kind, shard_strings[shard as usize].as_str()])
                                 .inc();
 
-                            match simd_json::to_vec(&payload) {
+                            match serde_json::to_vec(&payload) {
                                 Ok(payload) => {
                                     let result = channel
                                         .basic_publish(
@@ -171,7 +171,10 @@ where
                         }
                     }
                     Err(err) => {
-                        warn!("[Shard {}] Could not decode payload: {:?}", shard, err);
+                        warn!(
+                            "[Shard {}] Could not decode payload: {:?}\n{:?}",
+                            shard, err, data.bytes
+                        );
                     }
                 }
             }
@@ -203,7 +206,7 @@ pub async fn incoming(clusters: &[Cluster], channel: &Channel) {
                 let _ = channel
                     .basic_ack(delivery.delivery_tag, BasicAckOptions::default())
                     .await;
-                match simd_json::from_slice::<DeliveryInfo>(delivery.data.as_mut_slice()) {
+                match serde_json::from_slice::<DeliveryInfo>(delivery.data.as_mut_slice()) {
                     Ok(payload) => {
                         let cluster = clusters
                             .iter()
