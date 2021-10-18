@@ -106,7 +106,7 @@ checksum = "904dfeac50f3cdaba28fc6f57fdcddb75f49ed61346676a78c4ffe55877802fd"
 [[package]]
 name = "bathbot-cache"
 version = "0.1.0"
-source = "git+https://github.com/MaxOhn/bathbot-cache?branch=main#dbf8f904d0e678a73f1efad26f488818497681d1"
+source = "git+https://github.com/MaxOhn/bathbot-cache?branch=sticker_patch#d0fe6105d9cfdcc89394d7b8bbce43a2168db864"
 dependencies = [
  "deadpool-redis",
  "hashbrown",
@@ -390,9 +390,9 @@ dependencies = [
 
 [[package]]
 name = "half"
-version = "1.7.1"
+version = "1.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "62aca2aba2d62b4a7f5b33f3712cb1b0692779a56fb510499d5c0aa594daeaf3"
+checksum = "ac5956d4e63858efaec57e0d6c1c2f6a41e1487f830314a324ccd7e2223a7ca0"
 
 [[package]]
 name = "hashbrown"
@@ -890,9 +890,9 @@ dependencies = [
 
 [[package]]
 name = "redis"
-version = "0.21.2"
+version = "0.21.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "202c5bf92cad3d57605c366e644a7fbf305a83f19754fc66678c6265dcc9b8b4"
+checksum = "dd71bdb3d0d6e9183e675c977f652fbf8abc3b63fcb722e9abb42f82ef839b65"
 dependencies = [
  "async-trait",
  "bytes",
@@ -1340,8 +1340,7 @@ dependencies = [
 [[package]]
 name = "twilight-gateway"
 version = "0.6.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3d0495761099f21c92050486717b3ccd8b3cd137626a511c0694d32edd92511b"
+source = "git+https://github.com/MaxOhn/twilight?branch=sticker_patch#b15e22af024bd0806e4ab9536dcec84bcb147e59"
 dependencies = [
  "bitflags",
  "flate2",
@@ -1360,8 +1359,7 @@ dependencies = [
 [[package]]
 name = "twilight-gateway-queue"
 version = "0.6.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5f45ea68d917d5fbbfe739be9ace81d6824518262feb7a9139552bab64811f5a"
+source = "git+https://github.com/MaxOhn/twilight?branch=sticker_patch#b15e22af024bd0806e4ab9536dcec84bcb147e59"
 dependencies = [
  "tokio",
  "tracing",
@@ -1371,8 +1369,7 @@ dependencies = [
 [[package]]
 name = "twilight-http"
 version = "0.6.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "08ef176da0d6a25e7f6b69d6efddacc215ac62313596047566726360ec6cf438"
+source = "git+https://github.com/MaxOhn/twilight?branch=sticker_patch#b15e22af024bd0806e4ab9536dcec84bcb147e59"
 dependencies = [
  "hyper",
  "hyper-rustls",
@@ -1387,8 +1384,7 @@ dependencies = [
 [[package]]
 name = "twilight-model"
 version = "0.6.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d7d27af7e29d24bdf4f7e2511b36cc571fb5613b5ca5726ca0da36f55d76668a"
+source = "git+https://github.com/MaxOhn/twilight?branch=sticker_patch#b15e22af024bd0806e4ab9536dcec84bcb147e59"
 dependencies = [
  "bitflags",
  "serde",
