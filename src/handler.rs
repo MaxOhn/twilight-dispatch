@@ -22,19 +22,18 @@ use tracing::{info, warn};
 use twilight_gateway::{Cluster, Event};
 use twilight_model::gateway::payload::RequestGuildMembers;
 
-const UPDATE_TIMEOUT: Duration = Duration::from_millis(10_000);
-
 pub async fn outgoing<E>(cache: Arc<Cache>, cluster: Cluster, channel: Channel, mut events: E)
 where
     E: Stream<Item = (u64, Event)> + Send + Sync + Unpin + 'static,
 {
+    let update_time = Duration::from_millis(CONFIG.cache_update_deadline_ms);
     let shard_strings: Vec<String> = (0..CONFIG.shards_total).map(|x| x.to_string()).collect();
 
     let (tx, mut rx) = mpsc::channel(10_000);
     let member_cluster = cluster.clone();
 
     tokio::spawn(async move {
-        let mut interval = interval(Duration::from_millis(100));
+        let mut interval = interval(Duration::from_millis(CONFIG.member_request_delay_ms));
         interval.set_missed_tick_behavior(MissedTickBehavior::Delay);
 
         while let Some((guild, shard)) = rx.recv().await {
@@ -48,7 +47,7 @@ where
     });
 
     while let Some((shard, event)) = events.next().await {
-        match timeout(UPDATE_TIMEOUT, cache.update(&event)).await {
+        match timeout(update_time, cache.update(&event)).await {
             Ok(Ok(_)) => {}
             Ok(Err(err)) => {
                 warn!("[Shard {}] Failed to update state: {:?}", shard, err);
