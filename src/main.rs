@@ -44,7 +44,13 @@ async fn main() {
 }
 
 async fn real_main() -> ApiResult<()> {
-    let cache = Arc::new(Cache::new(&CONFIG.redis_host, CONFIG.redis_port)?);
+    let cache = Cache::new(
+        &CONFIG.redis_host,
+        CONFIG.redis_port,
+        CONFIG.cache_user_expire,
+    )?;
+
+    let cache = Arc::new(cache);
 
     let amqp = lapin::Connection::connect(
         format!(
