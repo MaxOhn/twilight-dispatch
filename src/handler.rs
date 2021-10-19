@@ -50,10 +50,19 @@ where
         match timeout(update_time, cache.update(&event)).await {
             Ok(Ok(_)) => {}
             Ok(Err(err)) => {
-                warn!("[Shard {}] Failed to update state: {:?}", shard, err);
+                warn!(
+                    "[Shard {}] Failed to update state for {:?}: {:?}",
+                    shard,
+                    event.kind(),
+                    err
+                );
             }
             Err(_) => {
-                warn!("[Shard {}] Timed out while updating state", shard);
+                warn!(
+                    "[Shard {}] Timed out while updating state ({:?})",
+                    shard,
+                    event.kind()
+                );
             }
         }
 

@@ -106,7 +106,7 @@ checksum = "904dfeac50f3cdaba28fc6f57fdcddb75f49ed61346676a78c4ffe55877802fd"
 [[package]]
 name = "bathbot-cache"
 version = "0.2.0"
-source = "git+https://github.com/MaxOhn/bathbot-cache?branch=sticker_patch#a7e8edd8b890428e08fe12fb05fa78d04473f524"
+source = "git+https://github.com/MaxOhn/bathbot-cache?branch=sticker_patch#45183ee4ddb5c9f3171100485b611ab9784be53a"
 dependencies = [
  "deadpool-redis",
  "hashbrown",
